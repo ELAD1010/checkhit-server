@@ -2,7 +2,11 @@ import dotenv from "dotenv";
 import { Database, IdToken, Provider } from "ltijs";
 import express from "express";
 import { Request, Response } from "express";
+import { setupSwagger } from "./docs/swagger.js";
+import { assignmentRouter } from "./routes/assignment.routes.js";
 import { login } from "./routes/auth.js";
+import { courseRouter } from "./routes/course.routes.js";
+import { userRouter } from "./routes/user.routes.js";
 
 dotenv.config();
 
@@ -50,6 +54,17 @@ export const boostrapLti = async (db: Database): Promise<void> => {
     },
   );
 
+  lti.whitelist(
+    "/api-docs",
+    "/api-docs/",
+    "/api-docs.json",
+    "/api-docs/swagger-ui.css",
+    "/api-docs/swagger-ui-bundle.js",
+    "/api-docs/swagger-ui-standalone-preset.js",
+    "/api-docs/swagger-ui-init.js",
+    "/api-docs/favicon-32x32.png",
+    "/api-docs/favicon-16x16.png",
+  );
   lti.onConnect(login);
 
   // server.js (Your Express Backend)
@@ -64,7 +79,44 @@ export const boostrapLti = async (db: Database): Promise<void> => {
   });
 
   lti.app.use(express.json());
+  setupSwagger(lti.app);
+  lti.app.use("/api", assignmentRouter);
+  lti.app.use("/api", courseRouter);
+  lti.app.use("/api", userRouter);
 
+  /**
+   * @openapi
+   * /generate-deeplink:
+   *   post:
+   *     tags: [LTI]
+   *     summary: Generate an LTI deep-link response
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             required: [taskTitle, maxScore, taskId]
+   *             properties:
+   *               taskTitle:
+   *                 type: string
+   *               maxScore:
+   *                 type: number
+   *                 exclusiveMinimum: 0
+   *               taskId:
+   *                 type: string
+   *     responses:
+   *       200:
+   *         description: HTML form that submits the deep-link response
+   *         content:
+   *           text/html:
+   *             schema:
+   *               type: string
+   *       401:
+   *         description: Missing LTI session
+   *       500:
+   *         description: Server error
+   */
   lti.app.post("/api/generate-deeplink", async (req, res) => {
     try {
       const { taskTitle, maxScore, taskId } = req.body;
