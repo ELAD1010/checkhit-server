@@ -9,6 +9,7 @@ declare global {
       DB_HOST: string;
       DB_PORT: number;
       DB_NAME: string;
+      LTI_DB_NAME: string;
       LTI_ENCRYPTION_KEY: string;
       MOODLE_URL: string;
       MOODLE_CLIENT_ID: string;
