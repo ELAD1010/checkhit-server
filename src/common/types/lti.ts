@@ -21,8 +21,8 @@ export type LtiToken = IdToken & {
     };
     custom?: Record<string, string>;
     endpoint?: {
-      lineItem?: string;
-      lineItems?: string;
+      lineitem?: string;
+      lineitems?: string;
       scope?: string[];
     };
   };

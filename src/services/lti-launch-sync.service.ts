@@ -366,7 +366,7 @@ export class LtiLaunchSyncService {
       return null;
     }
 
-    const lineItemUrl = token.platformContext.endpoint?.lineItem ?? null;
+    const lineItemUrl = token.platformContext.endpoint?.lineitem ?? null;
     await repository.upsert(
       {
         platformId,
