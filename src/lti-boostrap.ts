@@ -55,6 +55,7 @@ export const boostrapLti = async (db: Database): Promise<void> => {
   );
 
   lti.whitelist(
+    { route: new RegExp(/^\/api\/.*/), method: "ALL" },
     "/api-docs",
     "/api-docs/",
     "/api-docs.json",
