@@ -10,17 +10,14 @@ export const parseCreateUserInput = (body: unknown): CreateUserInput | null => {
     return null;
   }
 
-  const { name, email, ltiSubject } = body as Record<string, unknown>;
+  const { name, email } = body as Record<string, unknown>;
 
   if (
     typeof name !== "string" ||
     name.trim() === "" ||
     typeof email !== "string" ||
     email.trim() === "" ||
-    !email.includes("@") ||
-    (ltiSubject !== undefined &&
-      ltiSubject !== null &&
-      typeof ltiSubject !== "string")
+    !email.includes("@")
   ) {
     return null;
   }
@@ -28,8 +25,6 @@ export const parseCreateUserInput = (body: unknown): CreateUserInput | null => {
   return {
     name: name.trim(),
     email: email.trim().toLowerCase(),
-    ltiSubject:
-      typeof ltiSubject === "string" ? ltiSubject.trim() || null : null,
   };
 };
 

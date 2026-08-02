@@ -21,18 +21,16 @@ export const openApiComponents = {
       properties: {
         name: { type: "string", minLength: 1 },
         email: { type: "string", format: "email" },
-        ltiSubject: { type: ["string", "null"] },
       },
     },
     User: {
       type: "object",
-      required: ["id", "name", "email", "role"],
+      required: ["id", "name", "role"],
       properties: {
         id: { type: "string", format: "uuid" },
         name: { type: "string" },
-        email: { type: "string", format: "email" },
+        email: { type: ["string", "null"], format: "email" },
         role: { type: "string", enum: ["STUDENT", "LECTURER"] },
-        ltiSubject: { type: ["string", "null"] },
         createdAt: { type: "string", format: "date-time" },
         updatedAt: { type: "string", format: "date-time" },
       },
@@ -83,7 +81,6 @@ export const openApiComponents = {
           uniqueItems: true,
           items: { type: "string", format: "uuid" },
         },
-        ltiContextId: { type: ["string", "null"] },
       },
     },
     Course: {
@@ -94,7 +91,6 @@ export const openApiComponents = {
         name: { type: "string" },
         semester: { type: "string" },
         academicYear: { type: "integer" },
-        ltiContextId: { type: ["string", "null"] },
         lecturers: {
           type: "array",
           items: { $ref: "#/components/schemas/CourseLecturer" },
@@ -124,11 +120,6 @@ export const openApiComponents = {
           type: "string",
           enum: ["DRAFT", "PUBLISHED", "CLOSED", "ARCHIVED"],
           default: "DRAFT",
-        },
-        ltiResourceLinkId: { type: ["string", "null"] },
-        ltiLineItemUrl: {
-          type: ["string", "null"],
-          format: "uri",
         },
       },
     },

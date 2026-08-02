@@ -13,7 +13,7 @@ const parseCreateCourseInput = (body: unknown): CreateCourseInput | null => {
     return null;
   }
 
-  const { name, semester, academicYear, lecturerIds, ltiContextId } =
+  const { name, semester, academicYear, lecturerIds } =
     body as Record<string, unknown>;
 
   if (
@@ -29,10 +29,7 @@ const parseCreateCourseInput = (body: unknown): CreateCourseInput | null => {
     lecturerIds.length === 0 ||
     !lecturerIds.every(
       (lecturerId) => typeof lecturerId === "string" && isUuid(lecturerId),
-    ) ||
-    (ltiContextId !== undefined &&
-      ltiContextId !== null &&
-      typeof ltiContextId !== "string")
+    )
   ) {
     return null;
   }
@@ -42,8 +39,6 @@ const parseCreateCourseInput = (body: unknown): CreateCourseInput | null => {
     semester: semester.trim(),
     academicYear,
     lecturerIds: [...new Set(lecturerIds)],
-    ltiContextId:
-      typeof ltiContextId === "string" ? ltiContextId.trim() || null : null,
   };
 };
 
