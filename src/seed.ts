@@ -524,6 +524,8 @@ async function seed() {
     const lab1 = assignmentMap.get("Lab 1: Linked Lists & Stack Implementations");
     const sqlHw = assignmentMap.get("Homework 1: Complex SQL Queries & Aggregations");
     const paper = assignmentMap.get("Midterm Paper: Transformer Models & Attention Mechanisms");
+    const aStar = assignmentMap.get("Assignment 1: A* Search and Heuristic Pathfinding");
+    const midtermExam = assignmentMap.get("Midterm Exam: Sorting & Complexity Analysis");
 
     const alice = studentMap.get("alice.johnson@student.university.edu")!;
     const bob = studentMap.get("bob.smith@student.university.edu")!;
@@ -531,6 +533,7 @@ async function seed() {
     const diana = studentMap.get("diana.prince@student.university.edu")!;
     const ethan = studentMap.get("ethan.hunt@student.university.edu")!;
     const fiona = studentMap.get("fiona.gallagher@student.university.edu")!;
+    const george = studentMap.get("george.clark@student.university.edu")!;
 
     const turing = lecturerMap.get("alan.turing@university.edu")!;
     const knuth = lecturerMap.get("donald.knuth@university.edu")!;
@@ -769,6 +772,178 @@ async function seed() {
           studentId: charlie.student.userId,
           reviewerId: turing.lecturer.userId,
           reason: "Section 3.4 of my submission covers recurrence bottleneck comparison in detail. Please reconsider.",
+          status: AppealStatus.UNDER_REVIEW,
+          resolution: null,
+          resolvedAt: null,
+        });
+        await appealRepo.save(appeal);
+      }
+    }
+
+    // Case 8: George on CS201 Lab 1 (Open Appeal - SUBMITTED)
+    if (lab1 && george) {
+      let sub = await submissionRepo.findOne({
+        where: { assignmentId: lab1.id, studentId: george.student.userId, attemptNumber: 1 },
+      });
+      if (!sub) {
+        sub = submissionRepo.create({
+          assignmentId: lab1.id,
+          studentId: george.student.userId,
+          attemptNumber: 1,
+          answerText: `// George Clark - Lab 1\nclass Stack<T> {\n  private items: T[] = [];\n  push(item: T): void { this.items.push(item); }\n  pop(): T { if (this.isEmpty()) throw new Error("EmptyStackError"); return this.items.pop()!; }\n  peek(): T | null { return this.items[this.items.length - 1] ?? null; }\n  isEmpty(): boolean { return this.items.length === 0; }\n}`,
+          status: SubmissionStatus.SUBMITTED,
+          submittedAt: new Date(Date.now() - 4 * 24 * 60 * 60 * 1000),
+        });
+        await submissionRepo.save(sub);
+
+        const evalRecord = evaluationRepo.create({
+          submissionId: sub.id,
+          score: 82.0,
+          maxScore: 100,
+          feedback: "Good implementation of Stack and Linked List. Deducted 8 points for exception handling and 10 points for memory cleanup on deallocation.",
+          model: "gemini-2.5-pro",
+          promptVersion: "v1.4",
+          confidence: 0.93,
+          status: EvaluationStatus.COMPLETED,
+          isFinal: true,
+        });
+        await evaluationRepo.save(evalRecord);
+
+        const appeal = appealRepo.create({
+          submissionId: sub.id,
+          evaluationId: evalRecord.id,
+          studentId: george.student.userId,
+          reviewerId: null,
+          reason: "In section 2 of my submission, line 4 throws a custom EmptyStackError as specified in the assignment rubric. Please re-evaluate the exception handling penalty.",
+          status: AppealStatus.SUBMITTED,
+          resolution: null,
+          resolvedAt: null,
+        });
+        await appealRepo.save(appeal);
+      }
+    }
+
+    // Case 9: George on CS401 A* Search (Resolved Appeal - ACCEPTED)
+    if (aStar && george) {
+      let sub = await submissionRepo.findOne({
+        where: { assignmentId: aStar.id, studentId: george.student.userId, attemptNumber: 1 },
+      });
+      if (!sub) {
+        sub = submissionRepo.create({
+          assignmentId: aStar.id,
+          studentId: george.student.userId,
+          attemptNumber: 1,
+          answerText: `// George Clark - A* Pathfinding\nfunction aStar(grid: number[][], start: [number, number], goal: [number, number]): Path {\n  // Open set with priority queue min-heap implementation...\n  const heuristic = (a: [number, number], b: [number, number]) => Math.abs(a[0]-b[0]) + Math.abs(a[1]-b[1]);\n  // ...\n}`,
+          status: SubmissionStatus.SUBMITTED,
+          submittedAt: new Date(Date.now() - 6 * 24 * 60 * 60 * 1000),
+        });
+        await submissionRepo.save(sub);
+
+        const evalRecord = evaluationRepo.create({
+          submissionId: sub.id,
+          score: 75.0,
+          maxScore: 100,
+          feedback: "A* implementation finds optimal path on grid graphs, but Manhattan distance heuristic admissibility proof was considered incomplete.",
+          model: "gemini-2.5-pro",
+          promptVersion: "v1.4",
+          confidence: 0.90,
+          status: EvaluationStatus.COMPLETED,
+          isFinal: true,
+        });
+        await evaluationRepo.save(evalRecord);
+
+        const appeal = appealRepo.create({
+          submissionId: sub.id,
+          evaluationId: evalRecord.id,
+          studentId: george.student.userId,
+          reviewerId: turing.lecturer.userId,
+          reason: "I included the full mathematical proof of Manhattan distance admissibility with triangle inequality in Appendix B of my report.",
+          status: AppealStatus.ACCEPTED,
+          resolution: "Appendix B proof verified. Admissibility and consistency conditions are fully satisfied. Score adjusted to 90.0/100.",
+          resolvedAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000),
+        });
+        await appealRepo.save(appeal);
+      }
+    }
+
+    // Case 10: George on CS201 Midterm Exam (Resolved Appeal - REJECTED)
+    if (midtermExam && george) {
+      let sub = await submissionRepo.findOne({
+        where: { assignmentId: midtermExam.id, studentId: george.student.userId, attemptNumber: 1 },
+      });
+      if (!sub) {
+        sub = submissionRepo.create({
+          assignmentId: midtermExam.id,
+          studentId: george.student.userId,
+          attemptNumber: 1,
+          answerText: `// George Clark - Midterm Solutions\nQuestion 1: Master Theorem T(n) = 2T(n/2) + O(n) => O(n log n)\nQuestion 4: Radix sort with integer float transform mapping sign bit to preserve ordering.`,
+          status: SubmissionStatus.SUBMITTED,
+          submittedAt: new Date(Date.now() - 12 * 24 * 60 * 60 * 1000),
+        });
+        await submissionRepo.save(sub);
+
+        const evalRecord = evaluationRepo.create({
+          submissionId: sub.id,
+          score: 88.0,
+          maxScore: 100,
+          feedback: "Strong performance overall. Question 4 (Radix sort vs Quick sort on floating point numbers) lacked discussion on IEEE 754 bitwise representation.",
+          model: "gemini-2.5-pro",
+          promptVersion: "v1.4",
+          confidence: 0.94,
+          status: EvaluationStatus.COMPLETED,
+          isFinal: true,
+        });
+        await evaluationRepo.save(evalRecord);
+
+        const appeal = appealRepo.create({
+          submissionId: sub.id,
+          evaluationId: evalRecord.id,
+          studentId: george.student.userId,
+          reviewerId: knuth.lecturer.userId,
+          reason: "I explained the integer transformation technique for float sorting which achieves O(n) without needing direct IEEE 754 bit casting.",
+          status: AppealStatus.REJECTED,
+          resolution: "While the integer transformation approach works for non-negative floats, it fails for negative floating point numbers without exponent sign flipping. Original deduction stands.",
+          resolvedAt: new Date(Date.now() - 4 * 24 * 60 * 60 * 1000),
+        });
+        await appealRepo.save(appeal);
+      }
+    }
+
+    // Case 11: George on CS401 Midterm Paper (In-Review Appeal - UNDER_REVIEW)
+    if (paper && george) {
+      let sub = await submissionRepo.findOne({
+        where: { assignmentId: paper.id, studentId: george.student.userId, attemptNumber: 1 },
+      });
+      if (!sub) {
+        sub = submissionRepo.create({
+          assignmentId: paper.id,
+          studentId: george.student.userId,
+          attemptNumber: 1,
+          answerText: `Title: Scaling Laws and Attention Complexity in Long-Context LLMs\nAbstract: We benchmark standard O(N^2) Softmax attention against FlashAttention-2, Linformer, and Performer kernel approximations...`,
+          status: SubmissionStatus.SUBMITTED,
+          submittedAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000),
+        });
+        await submissionRepo.save(sub);
+
+        const evalRecord = evaluationRepo.create({
+          submissionId: sub.id,
+          score: 79.0,
+          maxScore: 100,
+          feedback: "Good literature review. Point deduction for insufficient comparative benchmark data on linear attention variants.",
+          model: "gemini-2.5-pro",
+          promptVersion: "v1.4",
+          confidence: 0.91,
+          status: EvaluationStatus.COMPLETED,
+          isFinal: true,
+        });
+        await evaluationRepo.save(evalRecord);
+
+        const appeal = appealRepo.create({
+          submissionId: sub.id,
+          evaluationId: evalRecord.id,
+          studentId: george.student.userId,
+          reviewerId: turing.lecturer.userId,
+          reason: "Table 2 in Section 4 summarizes Performer, Linformer, and FlashAttention speedups across sequence lengths 2K to 32K. Requesting manual review of Table 2.",
           status: AppealStatus.UNDER_REVIEW,
           resolution: null,
           resolvedAt: null,

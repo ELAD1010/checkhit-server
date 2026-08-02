@@ -141,11 +141,173 @@ export const openApiComponents = {
           properties: {
             id: { type: "string", format: "uuid" },
             courseId: { type: "string", format: "uuid" },
+            course: {
+              type: "object",
+              properties: {
+                id: { type: "string", format: "uuid" },
+                name: { type: "string" },
+                semester: { type: "string" },
+                academicYear: { type: "integer" },
+              },
+            },
             createdAt: { type: "string", format: "date-time" },
             updatedAt: { type: "string", format: "date-time" },
           },
         },
       ],
+    },
+    StudentAssignmentEvaluation: {
+      type: "object",
+      required: ["id", "maxScore", "status", "isFinal"],
+      properties: {
+        id: { type: "string", format: "uuid" },
+        score: { type: ["number", "null"] },
+        maxScore: { type: "number" },
+        feedback: { type: ["string", "null"] },
+        status: {
+          type: "string",
+          enum: ["PENDING", "PROCESSING", "COMPLETED", "FAILED"],
+        },
+        isFinal: { type: "boolean" },
+      },
+    },
+    StudentAssignmentSubmission: {
+      type: "object",
+      required: ["id", "attemptNumber", "status"],
+      properties: {
+        id: { type: "string", format: "uuid" },
+        attemptNumber: { type: "integer", minimum: 1 },
+        status: { type: "string", enum: ["DRAFT", "SUBMITTED"] },
+        submittedAt: { type: ["string", "null"], format: "date-time" },
+        evaluation: {
+          type: ["object", "null"],
+          $ref: "#/components/schemas/StudentAssignmentEvaluation",
+        },
+      },
+    },
+    StudentAssignment: {
+      allOf: [
+        { $ref: "#/components/schemas/Assignment" },
+        {
+          type: "object",
+          required: ["studentStatus"],
+          properties: {
+            studentStatus: {
+              type: "string",
+              enum: ["NOT_STARTED", "DRAFT", "SUBMITTED", "GRADED", "OVERDUE"],
+            },
+            submission: {
+              type: ["object", "null"],
+              $ref: "#/components/schemas/StudentAssignmentSubmission",
+            },
+          },
+        },
+      ],
+    },
+    AppealFile: {
+      type: "object",
+      properties: {
+        appealId: { type: "string", format: "uuid" },
+        fileId: { type: "string", format: "uuid" },
+        file: {
+          type: "object",
+          properties: {
+            id: { type: "string", format: "uuid" },
+            originalName: { type: "string" },
+            mimeType: { type: "string" },
+            sizeBytes: { type: "integer" },
+            s3Key: { type: "string" },
+          },
+        },
+      },
+    },
+    AppealCourse: {
+      type: "object",
+      properties: {
+        id: { type: "string", format: "uuid" },
+        name: { type: "string" },
+        semester: { type: "string" },
+        academicYear: { type: "integer" },
+      },
+    },
+    AppealAssignment: {
+      type: "object",
+      properties: {
+        id: { type: "string", format: "uuid" },
+        name: { type: "string" },
+        maxScore: { type: "number" },
+        courseId: { type: "string", format: "uuid" },
+        course: { $ref: "#/components/schemas/AppealCourse" },
+      },
+    },
+    AppealSubmission: {
+      type: "object",
+      properties: {
+        id: { type: "string", format: "uuid" },
+        attemptNumber: { type: "integer" },
+        status: { type: "string", enum: ["DRAFT", "SUBMITTED"] },
+        submittedAt: { type: ["string", "null"], format: "date-time" },
+        assignment: { $ref: "#/components/schemas/AppealAssignment" },
+      },
+    },
+    AppealEvaluation: {
+      type: "object",
+      properties: {
+        id: { type: "string", format: "uuid" },
+        score: { type: ["number", "null"] },
+        maxScore: { type: "number" },
+        feedback: { type: ["string", "null"] },
+        status: {
+          type: "string",
+          enum: ["PENDING", "PROCESSING", "COMPLETED", "FAILED"],
+        },
+        isFinal: { type: "boolean" },
+      },
+    },
+    Appeal: {
+      type: "object",
+      required: [
+        "id",
+        "submissionId",
+        "evaluationId",
+        "studentId",
+        "reason",
+        "status",
+        "createdAt",
+        "updatedAt",
+      ],
+      properties: {
+        id: { type: "string", format: "uuid" },
+        submissionId: { type: "string", format: "uuid" },
+        evaluationId: { type: "string", format: "uuid" },
+        studentId: { type: "string", format: "uuid" },
+        reviewerId: { type: ["string", "null"], format: "uuid" },
+        reason: { type: "string" },
+        status: {
+          type: "string",
+          enum: [
+            "SUBMITTED",
+            "UNDER_REVIEW",
+            "ACCEPTED",
+            "REJECTED",
+            "CANCELLED",
+          ],
+        },
+        resolution: { type: ["string", "null"] },
+        resolvedAt: { type: ["string", "null"], format: "date-time" },
+        submission: { $ref: "#/components/schemas/AppealSubmission" },
+        evaluation: { $ref: "#/components/schemas/AppealEvaluation" },
+        reviewer: {
+          type: ["object", "null"],
+          $ref: "#/components/schemas/Lecturer",
+        },
+        files: {
+          type: "array",
+          items: { $ref: "#/components/schemas/AppealFile" },
+        },
+        createdAt: { type: "string", format: "date-time" },
+        updatedAt: { type: "string", format: "date-time" },
+      },
     },
   },
 } as const;

@@ -3,6 +3,7 @@ import { Database, IdToken, Provider } from "ltijs";
 import express from "express";
 import { Request, Response } from "express";
 import { setupSwagger } from "./docs/swagger.js";
+import { appealRouter } from "./routes/appeal.routes.js";
 import { assignmentRouter } from "./routes/assignment.routes.js";
 import { login } from "./routes/auth.js";
 import { courseRouter } from "./routes/course.routes.js";
@@ -81,6 +82,7 @@ export const boostrapLti = async (db: Database): Promise<void> => {
 
   lti.app.use(express.json());
   setupSwagger(lti.app);
+  lti.app.use("/api", appealRouter);
   lti.app.use("/api", assignmentRouter);
   lti.app.use("/api", courseRouter);
   lti.app.use("/api", userRouter);
