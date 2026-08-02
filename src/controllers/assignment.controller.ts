@@ -3,7 +3,9 @@ import { AssignmentStatus } from "../entities/enums.js";
 import {
   AssignmentCourseNotFoundError,
   AssignmentRepository,
+  AssignmentStudentNotFoundError,
   CreateAssignmentInput,
+  StudentNotEnrolledInCourseError,
 } from "../repositories/assignment.repository.js";
 import { getDatabaseErrorCode, isUuid } from "./user-controller.utils.js";
 
@@ -194,6 +196,82 @@ export const getCourseAssignments = async (
 
     console.error("Failed to fetch course assignments:", error);
     res.status(500).json({ message: "Failed to fetch course assignments" });
+  }
+};
+
+export const getStudentCourseAssignments = async (
+  req: Request,
+  res: Response,
+): Promise<void> => {
+  const studentId =
+    typeof req.params.studentId === "string" ? req.params.studentId : undefined;
+  const courseId =
+    typeof req.params.courseId === "string" ? req.params.courseId : undefined;
+
+  if (!studentId || !isUuid(studentId)) {
+    res.status(400).json({ message: "A valid student ID is required" });
+    return;
+  }
+
+  if (!courseId || !isUuid(courseId)) {
+    res.status(400).json({ message: "A valid course ID is required" });
+    return;
+  }
+
+  try {
+    const assignments =
+      await assignmentRepository.findStudentAssignmentsWithStatus(
+        studentId,
+        courseId,
+      );
+    res.json(assignments);
+  } catch (error) {
+    if (error instanceof AssignmentStudentNotFoundError) {
+      res.status(404).json({ message: error.message });
+      return;
+    }
+
+    if (error instanceof AssignmentCourseNotFoundError) {
+      res.status(404).json({ message: error.message });
+      return;
+    }
+
+    if (error instanceof StudentNotEnrolledInCourseError) {
+      res.status(404).json({ message: error.message });
+      return;
+    }
+
+    console.error("Failed to fetch student course assignments:", error);
+    res
+      .status(500)
+      .json({ message: "Failed to fetch student course assignments" });
+  }
+};
+
+export const getAllStudentAssignments = async (
+  req: Request,
+  res: Response,
+): Promise<void> => {
+  const studentId =
+    typeof req.params.studentId === "string" ? req.params.studentId : undefined;
+
+  if (!studentId || !isUuid(studentId)) {
+    res.status(400).json({ message: "A valid student ID is required" });
+    return;
+  }
+
+  try {
+    const assignments =
+      await assignmentRepository.findAllStudentAssignmentsWithStatus(studentId);
+    res.json(assignments);
+  } catch (error) {
+    if (error instanceof AssignmentStudentNotFoundError) {
+      res.status(404).json({ message: error.message });
+      return;
+    }
+
+    console.error("Failed to fetch student assignments:", error);
+    res.status(500).json({ message: "Failed to fetch student assignments" });
   }
 };
 

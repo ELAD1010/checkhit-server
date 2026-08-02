@@ -1,4 +1,8 @@
 export {
+  AppealRepository,
+  AppealStudentNotFoundError,
+} from "./appeal.repository.js";
+export {
   AssignmentCourseNotFoundError,
   AssignmentRepository,
   type CreateAssignmentInput,
@@ -12,3 +16,4 @@ export {
   type CreateUserInput,
   UserRepository,
 } from "./user.repository.js";
+

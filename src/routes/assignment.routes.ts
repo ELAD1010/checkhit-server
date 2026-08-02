@@ -2,8 +2,10 @@ import { Router } from "express";
 import {
   createAssignment,
   deleteAssignment,
+  getAllStudentAssignments,
   getAssignmentById,
   getCourseAssignments,
+  getStudentCourseAssignments,
 } from "../controllers/assignment.controller.js";
 
 export const assignmentRouter = Router();
@@ -75,6 +77,95 @@ assignmentRouter.post("/courses/:courseId/assignments", createAssignment);
  *         description: Server error
  */
 assignmentRouter.get("/courses/:courseId/assignments", getCourseAssignments);
+
+/**
+ * @openapi
+ * /students/{studentId}/courses/{courseId}/assignments:
+ *   get:
+ *     tags: [Assignments, Students, Courses]
+ *     summary: Get assignments for a course with student completion status
+ *     parameters:
+ *       - in: path
+ *         name: studentId
+ *         required: true
+ *         description: Student user ID
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *       - in: path
+ *         name: courseId
+ *         required: true
+ *         description: Course ID
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     responses:
+ *       200:
+ *         description: List of course assignments with student completion status
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 $ref: '#/components/schemas/StudentAssignment'
+ *       400:
+ *         description: Invalid student ID or course ID
+ *       404:
+ *         description: Student or course not found, or student is not enrolled
+ *       500:
+ *         description: Server error
+ */
+assignmentRouter.get(
+  "/students/:studentId/courses/:courseId/assignments",
+  getStudentCourseAssignments,
+);
+
+/**
+ * @openapi
+ * /students/{studentId}/assignments:
+ *   get:
+ *     tags: [Assignments, Students]
+ *     summary: Get all assignments across enrolled courses with student completion status
+ *     parameters:
+ *       - in: path
+ *         name: studentId
+ *         required: true
+ *         description: Student user ID
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     responses:
+ *       200:
+ *         description: Assignments with student completion status and course details
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 $ref: '#/components/schemas/StudentAssignment'
+ *       400:
+ *         description: Invalid student ID
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       404:
+ *         description: Student not found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       500:
+ *         description: Server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
+assignmentRouter.get(
+  "/students/:studentId/assignments",
+  getAllStudentAssignments,
+);
 
 /**
  * @openapi
