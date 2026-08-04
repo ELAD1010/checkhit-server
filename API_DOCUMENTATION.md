@@ -40,6 +40,7 @@ Welcome to the **CheckHit API** documentation. This REST API facilitates managin
    - [Get Course Assignments with Student Completion Status (`GET /api/students/{studentId}/courses/{courseId}/assignments`)](#get-apistudentsstudentidcoursescourseidassignments-1)
    - [Get Assignment by ID / Student Assignment Detail (`GET /api/assignments/{assignmentId}`)](#get-apiassignmentsassignmentid)
    - [Get Student Assignment Detail (`GET /api/students/{studentId}/assignments/{assignmentId}`)](#get-apistudentsstudentidassignmentsassignmentid)
+   - [Get Lecturer Assignment Overview (`GET /api/assignments/{assignmentId}/lecturer-overview`)](#get-apiassignmentsassignmentidlecturer-overview)
    - [Delete an Assignment (`DELETE /api/assignments/{assignmentId}`)](#delete-apiassignmentsassignmentid)
 6. [5. Appeals Endpoints](#5-appeals)
    - [Get Student Appeals (`GET /api/students/{studentId}/appeals`)](#get-apistudentsstudentidappeals)
@@ -995,6 +996,92 @@ Retrieves the full assignment details for a specific student, including parent c
   - **`200 OK`**: Returns `StudentAssignmentDetail` object (see schema above).
   - **`400 Bad Request`**: Invalid student ID or assignment ID.
   - **`404 Not Found`**: Student or assignment not found.
+### `GET /api/assignments/{assignmentId}/lecturer-overview`
+Retrieves comprehensive lecturer overview for an assignment, including assignment details, parent course metadata, high-level summary KPIs (total students, submitted, missing, graded, evaluating, appeals, average score, submission rate, remaining hours), and the full enrolled student roster with submission, evaluation, and appeal statuses.
+
+- **Tags**: `Assignments`, `Lecturers`
+- **Path Parameters**:
+  - `assignmentId` (`uuid`, required): The assignment ID.
+- **Query Parameters**:
+  - `search` (`string`, optional): Case-insensitive filter students by name, email, or student number.
+  - `status` (`string`, optional): Filter student roster by status (`"GRADED"`, `"EVALUATING"`, `"SUBMITTED"`, `"NOT_STARTED"`, `"OVERDUE"`, `"APPEAL"`).
+- **Responses**:
+  - **`200 OK`**: Returns `LecturerAssignmentOverviewResponse` object.
+    ```json
+    {
+      "id": "59f56f23-0c0a-402f-817c-f85e33929919",
+      "courseId": "ffa88441-f78e-4e44-b110-6ab402f5cc10",
+      "name": "Homework 1: Hello World & Variables",
+      "description": "Write a program that prints Hello World and performs arithmetic operations.",
+      "type": "Coding",
+      "evaluationInstructions": "Verify syntax correctness, descriptive variable naming, and matching output format.",
+      "maxScore": 100,
+      "status": "PUBLISHED",
+      "startAt": "2026-07-19T13:54:23.000Z",
+      "dueAt": "2026-08-09T13:54:23.000Z",
+      "createdAt": "2026-07-19T13:54:23.000Z",
+      "updatedAt": "2026-07-19T13:54:23.000Z",
+      "course": {
+        "id": "ffa88441-f78e-4e44-b110-6ab402f5cc10",
+        "name": "CS101: Introduction to Computer Science",
+        "code": "CS101",
+        "semester": "Fall",
+        "academicYear": 2026
+      },
+      "stats": {
+        "totalStudents": 6,
+        "submitted": 3,
+        "missing": 3,
+        "graded": 3,
+        "evaluating": 0,
+        "appealsCount": 2,
+        "averageScore": 92.5,
+        "submissionRate": 50,
+        "remainingHours": 114
+      },
+      "students": [
+        {
+          "student": {
+            "userId": "3a12e3cb-3b43-4461-b514-5404d55e3479",
+            "name": "Alice Johnson",
+            "email": "alice@university.ac.il",
+            "studentNumber": "3a12e3cb"
+          },
+          "status": "GRADED",
+          "submission": {
+            "id": "787c8ceb-62bc-4402-985e-fb82f6fbf7ca",
+            "attemptNumber": 1,
+            "submittedAt": "2026-08-02T13:54:23.000Z",
+            "filesCount": 2
+          },
+          "evaluation": {
+            "id": "2da15ee6-24e5-4a5f-9f7a-8ab04cb9e438",
+            "score": 98.5,
+            "maxScore": 100,
+            "percentage": 98.5,
+            "isFinal": true,
+            "feedback": "Excellent code structure and comments.",
+            "evaluatedAt": "2026-08-02T14:10:00.000Z"
+          },
+          "appeal": null
+        },
+        {
+          "student": {
+            "userId": "6a382103-6f91-49b8-a734-601955dfeb85",
+            "name": "Diana Prince",
+            "email": "diana@university.ac.il",
+            "studentNumber": "6a382103"
+          },
+          "status": "NOT_STARTED",
+          "submission": null,
+          "evaluation": null,
+          "appeal": null
+        }
+      ]
+    }
+    ```
+  - **`400 Bad Request`**: Invalid assignment ID format.
+  - **`404 Not Found`**: Assignment not found.
   - **`500 Internal Server Error`**: Server error.
 
 ---
