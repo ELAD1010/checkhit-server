@@ -5,6 +5,7 @@ import {
   getAllStudentAssignments,
   getAssignmentById,
   getCourseAssignments,
+  getStudentAssignmentDetail,
   getStudentCourseAssignments,
   getStudentRecentGrades,
 } from "../controllers/assignment.controller.js";
@@ -253,8 +254,66 @@ assignmentRouter.get(
  * /assignments/{assignmentId}:
  *   get:
  *     tags: [Assignments]
- *     summary: Get an assignment by ID
+ *     summary: Get an assignment by ID (optionally includes student submission/evaluation/appeal if studentId is supplied)
  *     parameters:
+ *       - in: path
+ *         name: assignmentId
+ *         required: true
+ *         description: Assignment ID
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *       - in: query
+ *         name: studentId
+ *         required: false
+ *         description: Optional student user ID to include personal submission, evaluation, files, and appeal status
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     responses:
+ *       200:
+ *         description: Assignment details (or Student Assignment Details if studentId provided)
+ *         content:
+ *           application/json:
+ *             schema:
+ *               oneOf:
+ *                 - $ref: '#/components/schemas/Assignment'
+ *                 - $ref: '#/components/schemas/StudentAssignmentDetail'
+ *       400:
+ *         description: Invalid assignment or student ID
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       404:
+ *         description: Assignment or Student not found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       500:
+ *         description: Server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
+assignmentRouter.get("/assignments/:assignmentId", getAssignmentById);
+
+/**
+ * @openapi
+ * /students/{studentId}/assignments/{assignmentId}:
+ *   get:
+ *     tags: [Assignments, Students]
+ *     summary: Get full assignment details for a specific student (includes submission, files, evaluation, and appeal)
+ *     parameters:
+ *       - in: path
+ *         name: studentId
+ *         required: true
+ *         description: Student user ID
+ *         schema:
+ *           type: string
+ *           format: uuid
  *       - in: path
  *         name: assignmentId
  *         required: true
@@ -264,19 +323,34 @@ assignmentRouter.get(
  *           format: uuid
  *     responses:
  *       200:
- *         description: Assignment
+ *         description: Student Assignment details with submission, evaluation, and appeal
  *         content:
  *           application/json:
  *             schema:
- *               $ref: '#/components/schemas/Assignment'
+ *               $ref: '#/components/schemas/StudentAssignmentDetail'
  *       400:
- *         description: Invalid assignment ID
+ *         description: Invalid assignment or student ID
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
  *       404:
- *         description: Assignment not found
+ *         description: Assignment or Student not found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
  *       500:
  *         description: Server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
  */
-assignmentRouter.get("/assignments/:assignmentId", getAssignmentById);
+assignmentRouter.get(
+  "/students/:studentId/assignments/:assignmentId",
+  getStudentAssignmentDetail,
+);
 
 /**
  * @openapi

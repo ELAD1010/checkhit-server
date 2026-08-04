@@ -22,6 +22,8 @@ Welcome to the **CheckHit API** documentation. This REST API facilitates managin
 3. [2. Lecturers Endpoints](#2-lecturers)
    - [Create a Lecturer (`POST /api/lecturers`)](#post-apilecturers)
    - [Get Lecturer by ID (`GET /api/lecturers/{lecturerId}`)](#get-apilecturerslecturerid)
+   - [Get Appeals for Lecturer Courses (`GET /api/lecturers/{lecturerId}/appeals`)](#get-apilecturerslectureridappeals)
+   - [Get Lecturer Appeals Summary Stats (`GET /api/lecturers/{lecturerId}/appeals/stats`)](#get-apilecturerslectureridappealsstats)
 4. [3. Courses Endpoints](#3-courses)
    - [Create a Course (`POST /api/courses`)](#post-apicourses)
    - [Get Course by ID (`GET /api/courses/{courseId}`)](#get-apicoursescourseid)
@@ -35,10 +37,15 @@ Welcome to the **CheckHit API** documentation. This REST API facilitates managin
    - [Get All Student Assignments Across All Courses (`GET /api/students/{studentId}/assignments`)](#get-apistudentsstudentidassignments-1)
    - [Get Student Recent Graded Assignments (`GET /api/students/{studentId}/grades`)](#get-apistudentsstudentidgrades-1)
    - [Get Course Assignments with Student Completion Status (`GET /api/students/{studentId}/courses/{courseId}/assignments`)](#get-apistudentsstudentidcoursescourseidassignments-1)
-   - [Get Assignment by ID (`GET /api/assignments/{assignmentId}`)](#get-apiassignmentsassignmentid)
+   - [Get Assignment by ID / Student Assignment Detail (`GET /api/assignments/{assignmentId}`)](#get-apiassignmentsassignmentid)
+   - [Get Student Assignment Detail (`GET /api/students/{studentId}/assignments/{assignmentId}`)](#get-apistudentsstudentidassignmentsassignmentid)
    - [Delete an Assignment (`DELETE /api/assignments/{assignmentId}`)](#delete-apiassignmentsassignmentid)
 6. [5. Appeals Endpoints](#5-appeals)
-   - [Get Student Appeals (`GET /api/students/{studentId}/appeals`)](#get-apistudentsstudentidappeals-1)
+   - [Get Student Appeals (`GET /api/students/{studentId}/appeals`)](#get-apistudentsstudentidappeals)
+   - [Get Appeals for Lecturer Courses (`GET /api/lecturers/{lecturerId}/appeals`)](#get-apilecturerslectureridappeals)
+   - [Get Lecturer Appeals Summary Stats (`GET /api/lecturers/{lecturerId}/appeals/stats`)](#get-apilecturerslectureridappealsstats)
+   - [Get Appeal by ID (`GET /api/appeals/{appealId}`)](#get-apiappealsappealid)
+   - [Resolve Appeal (`PATCH /api/appeals/{appealId}`)](#patch-apiappealsappealid)
 7. [6. LTI Integration Endpoints](#6-lti-integration)
    - [Generate Deep-Link Form (`POST /api/generate-deeplink`)](#post-apigenerate-deeplink)
 8. [7. Notifications Endpoints](#7-notifications)
@@ -792,15 +799,84 @@ Retrieves all assignments in a course along with the completion status, latest s
 ---
 
 ### `GET /api/assignments/{assignmentId}`
-Retrieves a single assignment by its ID.
+Retrieves a single assignment by its ID. If the optional `studentId` query parameter is provided (or when authenticated as a student in future token mode), it returns the comprehensive **Student Assignment Detail** including completion status, latest submission, uploaded files, evaluation, and appeal.
 
 - **Tags**: `Assignments`
 - **Path Parameters**:
   - `assignmentId` (`uuid`, required): The assignment ID.
+- **Query Parameters**:
+  - `studentId` (`uuid`, optional): The student user ID to include personal submission, evaluation, files, and appeal status.
 - **Responses**:
-  - **`200 OK`**: Returns `Assignment` object.
-  - **`400 Bad Request`**: Invalid assignment ID.
-  - **`404 Not Found`**: Assignment not found.
+  - **`200 OK`**: Returns `Assignment` or `StudentAssignmentDetail` object.
+    ```json
+    {
+      "id": "ab677558-ac66-4af5-9d5e-700a1e941c14",
+      "courseId": "9ac59487-edce-4306-b2d4-6f8c75c65cf6",
+      "name": "Homework 3: Binary Search Trees",
+      "description": "In this exercise you will implement a Binary Search Tree in Java...",
+      "type": "Coding",
+      "evaluationInstructions": "Verify O(log n) time complexity, edge cases on node deletion...",
+      "maxScore": 100,
+      "status": "PUBLISHED",
+      "startAt": "2026-07-20T00:00:00.000Z",
+      "dueAt": "2026-08-25T23:59:59.000Z",
+      "course": {
+        "id": "9ac59487-edce-4306-b2d4-6f8c75c65cf6",
+        "name": "CS201: Data Structures and Algorithms",
+        "semester": "Fall",
+        "academicYear": 2026
+      },
+      "studentStatus": "GRADED",
+      "submission": {
+        "id": "e4414c2b-e7b8-450f-a3ff-21ebfb2540b6",
+        "attemptNumber": 1,
+        "status": "SUBMITTED",
+        "submittedAt": "2026-08-01T14:30:00.000Z",
+        "files": [
+          {
+            "id": "7b21389e-4c4f-4632-9dfa-25c276537b01",
+            "name": "binary_tree_submission.zip",
+            "sizeBytes": 1258291,
+            "mimeType": "application/zip"
+          }
+        ],
+        "evaluation": {
+          "id": "21387d85-f5b2-4d76-8fd7-ce746b1c6d86",
+          "score": 95,
+          "maxScore": 100,
+          "feedback": "The insert function implementation is efficient and correct...",
+          "status": "COMPLETED",
+          "isFinal": true,
+          "evaluatedAt": "2026-08-01T14:35:00.000Z"
+        }
+      },
+      "appeal": {
+        "id": "7a35c59f-d3b2-4416-8a07-164478142340",
+        "status": "UNDER_REVIEW",
+        "reason": "Requesting re-evaluation of documentation grade deduction.",
+        "resolution": null,
+        "resolvedAt": null,
+        "createdAt": "2026-08-02T10:00:00.000Z"
+      }
+    }
+    ```
+  - **`400 Bad Request`**: Invalid assignment ID or student ID.
+  - **`404 Not Found`**: Assignment not found or student not found.
+  - **`500 Internal Server Error`**: Server error.
+
+---
+
+### `GET /api/students/{studentId}/assignments/{assignmentId}`
+Retrieves the full assignment details for a specific student, including parent course, completion status, latest submission, uploaded files, evaluation, and appeal.
+
+- **Tags**: `Assignments`, `Students`
+- **Path Parameters**:
+  - `studentId` (`uuid`, required): The student user ID.
+  - `assignmentId` (`uuid`, required): The assignment ID.
+- **Responses**:
+  - **`200 OK`**: Returns `StudentAssignmentDetail` object (see schema above).
+  - **`400 Bad Request`**: Invalid student ID or assignment ID.
+  - **`404 Not Found`**: Student or assignment not found.
   - **`500 Internal Server Error`**: Server error.
 
 ---
@@ -827,10 +903,154 @@ Retrieves all grade appeals submitted by a student across all courses and assign
 - **Tags**: `Appeals`, `Students`
 - **Path Parameters**:
   - `studentId` (`uuid`, required): The student user ID.
+- **Query Parameters**:
+  - `status` (`string`, optional): Filter by status (`IN_PROGRESS`, `PENDING`, `SUBMITTED`, `UNDER_REVIEW`, `ACCEPTED`, `REJECTED`, `CANCELLED`).
+  - `limit` (`integer`, optional): Limit number of returned appeals.
 - **Responses**:
   - **`200 OK`**: Array of `Appeal` objects.
   - **`400 Bad Request`**: Invalid student UUID format.
   - **`404 Not Found`**: Student not found.
+  - **`500 Internal Server Error`**: Server error.
+
+---
+
+### `GET /api/lecturers/{lecturerId}/appeals`
+Retrieves all grade appeals submitted for assignments in courses taught by the specified lecturer. Supports filtering by tab/status, specific course, student search query, and pagination limit.
+
+- **Tags**: `Appeals`, `Lecturers`
+- **Path Parameters**:
+  - `lecturerId` (`uuid`, required): The lecturer user ID.
+- **Query Parameters**:
+  - `status` (`string`, optional): Filter by status group (`PENDING`, `RESOLVED`) or exact status enum (`SUBMITTED`, `UNDER_REVIEW`, `ACCEPTED`, `REJECTED`, `CANCELLED`).
+  - `courseId` (`uuid`, optional): Filter appeals by specific course ID.
+  - `search` (`string`, optional): Substring search matching student full name or student ID.
+  - `limit` (`integer`, optional): Limit number of results.
+- **Responses**:
+  - **`200 OK`**: Array of `Appeal` objects with student details, parent assignment and course, submission and evaluation.
+  - **`400 Bad Request`**: Invalid lecturer ID or course ID format.
+  - **`404 Not Found`**: Lecturer not found.
+  - **`500 Internal Server Error`**: Server error.
+
+```json
+[
+  {
+    "id": "1ce73b4a-2d44-4e99-8e3e-9f000fdfe4f1",
+    "submissionId": "0824f3ec-9493-4c5a-9cd3-c46d925ac029",
+    "evaluationId": "892e4da1-5796-40c9-9764-69ab2bd5cd06",
+    "studentId": "3a12e3cb-3b43-4461-b514-5404d55e3479",
+    "reviewerId": "bbb5766e-a71e-42b1-a056-467926e9a722",
+    "reason": "Table 2 in Section 4 summarizes Performer, Linformer, and FlashAttention speedups across sequence lengths 2K to 32K. Requesting manual review of Table 2.",
+    "status": "ACCEPTED",
+    "resolution": "Reviewed Table 2 in Section 4. Full credit awarded for speedup discussion.",
+    "resolvedAt": "2026-08-04T14:40:25.930Z",
+    "student": {
+      "userId": "3a12e3cb-3b43-4461-b514-5404d55e3479",
+      "user": {
+        "id": "3a12e3cb-3b43-4461-b514-5404d55e3479",
+        "name": "George Clark",
+        "email": "george.clark@university.edu",
+        "role": "STUDENT"
+      }
+    },
+    "submission": {
+      "id": "0824f3ec-9493-4c5a-9cd3-c46d925ac029",
+      "attemptNumber": 1,
+      "status": "SUBMITTED",
+      "submittedAt": "2026-07-28T16:00:00.000Z",
+      "assignment": {
+        "id": "c1a2b3c4-d5e6-4f7a-8b9c-0d1e2f3a4b5c",
+        "name": "Midterm Paper: Transformer Models & Attention Mechanisms",
+        "maxScore": 100,
+        "courseId": "f7d8e9a0-b1c2-4d3e-8f5a-6b7c8d9e0f1a",
+        "course": {
+          "id": "f7d8e9a0-b1c2-4d3e-8f5a-6b7c8d9e0f1a",
+          "name": "CS401: Artificial Intelligence & Autonomous Systems",
+          "semester": "SPRING",
+          "academicYear": 2026
+        }
+      }
+    },
+    "evaluation": {
+      "id": "892e4da1-5796-40c9-9764-69ab2bd5cd06",
+      "score": 92,
+      "maxScore": 100,
+      "feedback": "Reviewed Table 2 in Section 4. Full credit awarded for speedup discussion.",
+      "status": "COMPLETED",
+      "isFinal": true
+    },
+    "reviewer": {
+      "userId": "bbb5766e-a71e-42b1-a056-467926e9a722",
+      "user": {
+        "id": "bbb5766e-a71e-42b1-a056-467926e9a722",
+        "name": "Dr. Alan Turing",
+        "email": "alan.turing@university.edu",
+        "role": "LECTURER"
+      }
+    },
+    "files": []
+  }
+]
+```
+
+---
+
+### `GET /api/lecturers/{lecturerId}/appeals/stats`
+Retrieves summary appeal counts for a lecturer across all their taught courses to power the dashboard filter tabs and header badge.
+
+- **Tags**: `Appeals`, `Lecturers`
+- **Path Parameters**:
+  - `lecturerId` (`uuid`, required): The lecturer user ID.
+- **Responses**:
+  - **`200 OK`**: Object containing pending, resolved, and total counts.
+  - **`400 Bad Request`**: Invalid lecturer ID.
+  - **`404 Not Found`**: Lecturer not found.
+  - **`500 Internal Server Error`**: Server error.
+
+```json
+{
+  "pendingCount": 3,
+  "resolvedCount": 4,
+  "totalCount": 7
+}
+```
+
+---
+
+### `GET /api/appeals/{appealId}`
+Retrieves full details for a single appeal, including original submission answers, attached files, initial AI evaluation, lecturer review notes, and current resolution status.
+
+- **Tags**: `Appeals`
+- **Path Parameters**:
+  - `appealId` (`uuid`, required): The appeal UUID.
+- **Responses**:
+  - **`200 OK`**: Returns full `Appeal` object.
+  - **`400 Bad Request`**: Invalid appeal ID.
+  - **`404 Not Found`**: Appeal not found.
+  - **`500 Internal Server Error`**: Server error.
+
+---
+
+### `PATCH /api/appeals/{appealId}`
+*(Also available at alias `PATCH /api/appeals/{appealId}/resolve`)*
+
+Resolves a student appeal by setting the decision (`ACCEPTED` or `REJECTED`), lecturer resolution explanation, reviewer ID, and optionally an updated score (`newScore`). When accepted with a `newScore`, the backend automatically generates a new final `Evaluation` record so that student course GPA and assignment grades update in real time.
+
+- **Tags**: `Appeals`
+- **Path Parameters**:
+  - `appealId` (`uuid`, required): The appeal UUID.
+- **Request Body** (`application/json`):
+  ```json
+  {
+    "status": "ACCEPTED",
+    "resolution": "Reviewed Table 2 in Section 4. Full credit awarded for speedup discussion.",
+    "reviewerId": "bbb5766e-a71e-42b1-a056-467926e9a722",
+    "newScore": 92
+  }
+  ```
+- **Responses**:
+  - **`200 OK`**: Returns updated `Appeal` object with newly created final evaluation.
+  - **`400 Bad Request`**: Missing required fields or invalid score.
+  - **`404 Not Found`**: Appeal or reviewer lecturer not found.
   - **`500 Internal Server Error`**: Server error.
 
 ---

@@ -191,6 +191,18 @@ export const openApiComponents = {
           enum: ["PENDING", "PROCESSING", "COMPLETED", "FAILED"],
         },
         isFinal: { type: "boolean" },
+        evaluatedAt: { type: ["string", "null"], format: "date-time" },
+      },
+    },
+    StudentAssignmentFile: {
+      type: "object",
+      required: ["id", "name", "sizeBytes", "mimeType"],
+      properties: {
+        id: { type: "string", format: "uuid" },
+        name: { type: "string" },
+        sizeBytes: { type: "integer" },
+        mimeType: { type: "string" },
+        downloadUrl: { type: "string" },
       },
     },
     StudentAssignmentSubmission: {
@@ -207,6 +219,45 @@ export const openApiComponents = {
         },
       },
     },
+    StudentAssignmentDetailSubmission: {
+      type: "object",
+      required: ["id", "attemptNumber", "status", "files"],
+      properties: {
+        id: { type: "string", format: "uuid" },
+        attemptNumber: { type: "integer", minimum: 1 },
+        status: { type: "string", enum: ["DRAFT", "SUBMITTED"] },
+        submittedAt: { type: ["string", "null"], format: "date-time" },
+        files: {
+          type: "array",
+          items: { $ref: "#/components/schemas/StudentAssignmentFile" },
+        },
+        evaluation: {
+          type: ["object", "null"],
+          $ref: "#/components/schemas/StudentAssignmentEvaluation",
+        },
+      },
+    },
+    StudentAssignmentAppeal: {
+      type: "object",
+      required: ["id", "status", "reason", "createdAt"],
+      properties: {
+        id: { type: "string", format: "uuid" },
+        status: {
+          type: "string",
+          enum: [
+            "SUBMITTED",
+            "UNDER_REVIEW",
+            "ACCEPTED",
+            "REJECTED",
+            "CANCELLED",
+          ],
+        },
+        reason: { type: "string" },
+        resolution: { type: ["string", "null"] },
+        resolvedAt: { type: ["string", "null"], format: "date-time" },
+        createdAt: { type: "string", format: "date-time" },
+      },
+    },
     StudentAssignment: {
       allOf: [
         { $ref: "#/components/schemas/Assignment" },
@@ -221,6 +272,29 @@ export const openApiComponents = {
             submission: {
               type: ["object", "null"],
               $ref: "#/components/schemas/StudentAssignmentSubmission",
+            },
+          },
+        },
+      ],
+    },
+    StudentAssignmentDetail: {
+      allOf: [
+        { $ref: "#/components/schemas/Assignment" },
+        {
+          type: "object",
+          required: ["studentStatus"],
+          properties: {
+            studentStatus: {
+              type: "string",
+              enum: ["NOT_STARTED", "DRAFT", "SUBMITTED", "GRADED", "OVERDUE"],
+            },
+            submission: {
+              type: ["object", "null"],
+              $ref: "#/components/schemas/StudentAssignmentDetailSubmission",
+            },
+            appeal: {
+              type: ["object", "null"],
+              $ref: "#/components/schemas/StudentAssignmentAppeal",
             },
           },
         },
@@ -318,6 +392,13 @@ export const openApiComponents = {
         resolution: { type: ["string", "null"] },
         resolvedAt: { type: ["string", "null"], format: "date-time" },
         submission: { $ref: "#/components/schemas/AppealSubmission" },
+        student: {
+          type: "object",
+          properties: {
+            userId: { type: "string", format: "uuid" },
+            user: { $ref: "#/components/schemas/User" },
+          },
+        },
         evaluation: { $ref: "#/components/schemas/AppealEvaluation" },
         reviewer: {
           type: ["object", "null"],
@@ -329,6 +410,28 @@ export const openApiComponents = {
         },
         createdAt: { type: "string", format: "date-time" },
         updatedAt: { type: "string", format: "date-time" },
+      },
+    },
+    LecturerAppealsStats: {
+      type: "object",
+      required: ["pendingCount", "resolvedCount", "totalCount"],
+      properties: {
+        pendingCount: { type: "integer" },
+        resolvedCount: { type: "integer" },
+        totalCount: { type: "integer" },
+      },
+    },
+    ResolveAppealRequest: {
+      type: "object",
+      required: ["status", "resolution", "reviewerId"],
+      properties: {
+        status: {
+          type: "string",
+          enum: ["ACCEPTED", "REJECTED"],
+        },
+        resolution: { type: "string" },
+        reviewerId: { type: "string", format: "uuid" },
+        newScore: { type: "number", minimum: 0 },
       },
     },
     Notification: {

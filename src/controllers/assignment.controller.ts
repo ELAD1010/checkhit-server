@@ -156,7 +156,36 @@ export const getAssignmentById = async (
     return;
   }
 
+  const studentId =
+    typeof req.query.studentId === "string" && req.query.studentId.trim() !== ""
+      ? req.query.studentId.trim()
+      : typeof req.params.studentId === "string" &&
+          req.params.studentId.trim() !== ""
+        ? req.params.studentId.trim()
+        : (res.locals?.token?.user as string | undefined);
+
+  if (studentId && !isUuid(studentId)) {
+    res.status(400).json({ message: "A valid student ID is required" });
+    return;
+  }
+
   try {
+    if (studentId) {
+      const studentAssignment =
+        await assignmentRepository.findStudentAssignmentDetail(
+          assignmentId,
+          studentId,
+        );
+
+      if (!studentAssignment) {
+        res.status(404).json({ message: "Assignment not found" });
+        return;
+      }
+
+      res.json(studentAssignment);
+      return;
+    }
+
     const assignment =
       await assignmentRepository.findAssignmentById(assignmentId);
 
@@ -167,10 +196,17 @@ export const getAssignmentById = async (
 
     res.json(assignment);
   } catch (error) {
+    if (error instanceof AssignmentStudentNotFoundError) {
+      res.status(404).json({ message: error.message });
+      return;
+    }
+
     console.error("Failed to fetch assignment:", error);
     res.status(500).json({ message: "Failed to fetch assignment" });
   }
 };
+
+export const getStudentAssignmentDetail = getAssignmentById;
 
 export const getCourseAssignments = async (
   req: Request,
