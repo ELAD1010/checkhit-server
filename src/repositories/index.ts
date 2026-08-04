@@ -34,5 +34,15 @@ export {
   MessageUserNotFoundError,
   type PaginatedMessagesResult,
 } from "./message.repository.js";
-
-
+export {
+  DashboardRepository,
+  LecturerNotFoundError,
+  type LecturerDashboardResponse,
+  type LecturerDashboardKpis,
+  type RequiresAttentionItem,
+  type GradeDistributionData,
+  type GradeDistributionCourseData,
+  type GradeDistributionRange,
+  type AssignmentCompletionItem,
+  type DashboardCourseItem,
+} from "./dashboard.repository.js";

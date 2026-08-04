@@ -22,6 +22,7 @@ Welcome to the **CheckHit API** documentation. This REST API facilitates managin
 3. [2. Lecturers Endpoints](#2-lecturers)
    - [Create a Lecturer (`POST /api/lecturers`)](#post-apilecturers)
    - [Get Lecturer by ID (`GET /api/lecturers/{lecturerId}`)](#get-apilecturerslecturerid)
+   - [Get Lecturer Dashboard Data (`GET /api/lecturers/{lecturerId}/dashboard`)](#get-apilecturerslectureriddashboard)
    - [Get Appeals for Lecturer Courses (`GET /api/lecturers/{lecturerId}/appeals`)](#get-apilecturerslectureridappeals)
    - [Get Lecturer Appeals Summary Stats (`GET /api/lecturers/{lecturerId}/appeals/stats`)](#get-apilecturerslectureridappealsstats)
 4. [3. Courses Endpoints](#3-courses)
@@ -560,6 +561,123 @@ Fetches lecturer profile by lecturer ID.
   - **`400 Bad Request`**: Invalid lecturer UUID.
   - **`404 Not Found`**: Lecturer not found.
   - **`500 Internal Server Error`**: Server error.
+
+---
+
+### `GET /api/lecturers/{lecturerId}/dashboard`
+Retrieves aggregated dashboard data and analytics for a lecturer across all taught courses, including:
+- **KPIs**: Active courses count, pending appeals count, AI graded submissions ready for review/publishing, and overall student score average.
+- **Requires Attention ("דורש התייחסות")**: Prioritized triage items (urgent pending appeals, AI grading ready for review, and upcoming submission deadlines with missing student counts).
+- **Grade Distribution Analytics**: Overall and per-course grade buckets (`<60`, `60-69`, `70-79`, `80-89`, `90-100`), average score, median score, pass rate (% >= 60), and active enrolled students count.
+- **Assignment Completion Funnel**: Top active assignments tracking `graded`, `aiChecking`, `submitted`, `missing`, and `total` student submissions.
+- **Recent Courses**: Active courses taught by the lecturer with active student and assignment counts.
+
+- **Tags**: `Lecturers`, `Dashboard`
+- **Path Parameters**:
+  - `lecturerId` (`uuid`, required): The lecturer user ID.
+- **Responses**:
+  - **`200 OK`**: Returns `LecturerDashboardResponse` object.
+    ```json
+    {
+      "kpis": {
+        "activeCourses": 4,
+        "pendingAppeals": 6,
+        "readyToPublish": 3,
+        "averageScore": 84.0
+      },
+      "requiresAttention": [
+        {
+          "id": "appeal-CS201",
+          "type": "appeal",
+          "title": "6 ערעורים ממתינים לבדיקה דחופה",
+          "subtitle": "CS201 · Data Structures and Algorithms",
+          "actionText": "לבדיקת ערעורים",
+          "actionHref": "/lecturer/appeals?status=PENDING&courseId=9ac59487-edce-4306-b2d4-6f8c75c65cf6",
+          "accentColor": "rose"
+        },
+        {
+          "id": "ai-CS401",
+          "type": "ai-grading",
+          "title": "3 הגשות נבדקו ע״י AI וממתינות לאישור",
+          "subtitle": "CS401 · Midterm Paper: Transformer Models & Attention Mechanisms",
+          "actionText": "פרסום ציונים",
+          "actionHref": "/lecturer/courses/3a936078-e09f-415b-935a-663450856f39",
+          "accentColor": "teal"
+        },
+        {
+          "id": "deadline-Introduction",
+          "type": "deadline",
+          "title": "מועד הגשה קרוב - 5 סטודנטים טרם הגישו",
+          "subtitle": "Introduction · Homework 1: Hello World · מועד הגשה: 21.7, 19:11",
+          "actionText": "שליחת תזכורת",
+          "actionHref": "/lecturer/messages",
+          "accentColor": "amber"
+        }
+      ],
+      "gradeDistribution": {
+        "all": {
+          "courseId": "all",
+          "courseName": "כל הקורסים",
+          "average": 84.0,
+          "median": 82.5,
+          "passRate": 100.0,
+          "totalStudents": 24,
+          "data": [
+            { "rangeKey": "rangeBelow60", "label": "<60", "count": 0, "color": "#f43f5e", "darkColor": "#fb7185" },
+            { "rangeKey": "range60_69", "label": "60-69", "count": 1, "color": "#f59e0b", "darkColor": "#fbbf24" },
+            { "rangeKey": "range70_79", "label": "70-79", "count": 4, "color": "#3b82f6", "darkColor": "#60a5fa" },
+            { "rangeKey": "range80_89", "label": "80-89", "count": 6, "color": "#0d9488", "darkColor": "#2dd4bf" },
+            { "rangeKey": "range90_100", "label": "90-100", "count": 5, "color": "#10b981", "darkColor": "#34d399" }
+          ]
+        },
+        "byCourse": [
+          {
+            "courseId": "9ac59487-edce-4306-b2d4-6f8c75c65cf6",
+            "code": "CS201",
+            "courseName": "Data Structures and Algorithms",
+            "average": 84.1,
+            "median": 82.0,
+            "passRate": 100.0,
+            "totalStudents": 6,
+            "data": [
+              { "rangeKey": "rangeBelow60", "label": "<60", "count": 0, "color": "#f43f5e", "darkColor": "#fb7185" },
+              { "rangeKey": "range60_69", "label": "60-69", "count": 0, "color": "#f59e0b", "darkColor": "#fbbf24" },
+              { "rangeKey": "range70_79", "label": "70-79", "count": 1, "color": "#3b82f6", "darkColor": "#60a5fa" },
+              { "rangeKey": "range80_89", "label": "80-89", "count": 2, "color": "#0d9488", "darkColor": "#2dd4bf" },
+              { "rangeKey": "range90_100", "label": "90-100", "count": 1, "color": "#10b981", "darkColor": "#34d399" }
+            ]
+          }
+        ]
+      },
+      "assignmentCompletion": [
+        {
+          "assignmentId": "89d9700a-62be-4cc5-b108-261eecbc0c28",
+          "name": "Midterm Paper: Transformer Models & Attention Mechanisms",
+          "code": "CS401",
+          "graded": 2,
+          "aiChecking": 0,
+          "submitted": 0,
+          "missing": 4,
+          "total": 6
+        }
+      ],
+      "recentCourses": [
+        {
+          "id": "3a936078-e09f-415b-935a-663450856f39",
+          "name": "Artificial Intelligence & Autonomous Systems",
+          "code": "CS401",
+          "studentsCount": 6,
+          "activeAssignments": 4,
+          "academicYear": 2026,
+          "semester": "Spring"
+        }
+      ]
+    }
+    ```
+  - **`400 Bad Request`**: Invalid lecturer UUID format.
+  - **`404 Not Found`**: Lecturer not found.
+  - **`500 Internal Server Error`**: Server error.
+
 
 ---
 
