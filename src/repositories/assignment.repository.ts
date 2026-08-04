@@ -6,6 +6,7 @@ import { Student } from "../entities/student.js";
 import { Enrollment } from "../entities/enrollment.js";
 import { Submission } from "../entities/submission.js";
 import {
+  AppealStatus,
   AssignmentStatus,
   EvaluationStatus,
   MembershipStatus,
@@ -40,6 +41,14 @@ export type StudentAssignmentEvaluationSummary = {
   feedback: string | null;
   status: EvaluationStatus;
   isFinal: boolean;
+  evaluatedAt?: Date | null;
+};
+
+export type StudentAssignmentFileSummary = {
+  id: string;
+  name: string;
+  sizeBytes: number;
+  mimeType: string;
 };
 
 export type StudentAssignmentSubmissionSummary = {
@@ -50,9 +59,33 @@ export type StudentAssignmentSubmissionSummary = {
   evaluation: StudentAssignmentEvaluationSummary | null;
 };
 
+export type StudentAssignmentDetailSubmission = {
+  id: string;
+  attemptNumber: number;
+  status: SubmissionStatus;
+  submittedAt: Date | null;
+  files: StudentAssignmentFileSummary[];
+  evaluation: StudentAssignmentEvaluationSummary | null;
+};
+
+export type StudentAssignmentAppealSummary = {
+  id: string;
+  status: AppealStatus;
+  reason: string;
+  resolution: string | null;
+  resolvedAt: Date | null;
+  createdAt: Date;
+};
+
 export type StudentAssignmentResult = Assignment & {
   studentStatus: StudentAssignmentStatus;
   submission: StudentAssignmentSubmissionSummary | null;
+};
+
+export type StudentAssignmentDetailResult = Assignment & {
+  studentStatus: StudentAssignmentStatus;
+  submission: StudentAssignmentDetailSubmission | null;
+  appeal: StudentAssignmentAppealSummary | null;
 };
 
 export interface StudentAssignmentsQueryOptions {
@@ -117,6 +150,126 @@ export class AssignmentRepository {
     return this.dataSource.getRepository(Assignment).findOne({
       where: { id: assignmentId },
       relations: { course: true },
+    });
+  }
+
+  async findStudentAssignmentDetail(
+    assignmentId: string,
+    studentId: string,
+  ): Promise<StudentAssignmentDetailResult | null> {
+    const studentExists = await this.dataSource
+      .getRepository(Student)
+      .existsBy({ userId: studentId });
+
+    if (!studentExists) {
+      throw new AssignmentStudentNotFoundError(studentId);
+    }
+
+    const assignment = await this.dataSource.getRepository(Assignment).findOne({
+      where: { id: assignmentId },
+      relations: { course: true },
+    });
+
+    if (!assignment) {
+      return null;
+    }
+
+    const submission = await this.dataSource.getRepository(Submission).findOne({
+      where: {
+        studentId,
+        assignmentId,
+      },
+      relations: {
+        evaluations: true,
+        files: {
+          file: true,
+        },
+        appeals: true,
+      },
+      order: {
+        attemptNumber: "DESC",
+      },
+    });
+
+    let studentStatus: StudentAssignmentStatus = "NOT_STARTED";
+    let submissionDetail: StudentAssignmentDetailSubmission | null = null;
+    let appealDetail: StudentAssignmentAppealSummary | null = null;
+
+    if (submission) {
+      let evaluationSummary: StudentAssignmentEvaluationSummary | null = null;
+      const finalEval =
+        submission.evaluations?.find(
+          (e) => e.isFinal && e.status === EvaluationStatus.COMPLETED,
+        ) ||
+        submission.evaluations?.find(
+          (e) => e.status === EvaluationStatus.COMPLETED,
+        );
+
+      if (finalEval) {
+        evaluationSummary = {
+          id: finalEval.id,
+          score: finalEval.score,
+          maxScore: finalEval.maxScore,
+          feedback: finalEval.feedback,
+          status: finalEval.status,
+          isFinal: finalEval.isFinal,
+          evaluatedAt: finalEval.createdAt,
+        };
+      }
+
+      const filesSummary: StudentAssignmentFileSummary[] =
+        submission.files?.map((sf) => ({
+          id: sf.file.id,
+          name: sf.file.originalName,
+          sizeBytes: Number(sf.file.sizeBytes),
+          mimeType: sf.file.mimeType,
+        })) || [];
+
+      submissionDetail = {
+        id: submission.id,
+        attemptNumber: submission.attemptNumber,
+        status: submission.status,
+        submittedAt: submission.submittedAt,
+        files: filesSummary,
+        evaluation: evaluationSummary,
+      };
+
+      if (evaluationSummary) {
+        studentStatus = "GRADED";
+      } else if (submission.status === SubmissionStatus.SUBMITTED) {
+        studentStatus = "SUBMITTED";
+      } else {
+        studentStatus = "DRAFT";
+      }
+
+      if (submission.appeals && submission.appeals.length > 0) {
+        const sortedAppeals = [...submission.appeals].sort(
+          (a, b) =>
+            new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+        );
+        const latestAppeal = sortedAppeals[0];
+        appealDetail = {
+          id: latestAppeal.id,
+          status: latestAppeal.status,
+          reason: latestAppeal.reason,
+          resolution: latestAppeal.resolution,
+          resolvedAt: latestAppeal.resolvedAt,
+          createdAt: latestAppeal.createdAt,
+        };
+      }
+    } else {
+      const now = new Date();
+      if (assignment.dueAt && now > assignment.dueAt) {
+        studentStatus = "OVERDUE";
+      } else {
+        studentStatus = "NOT_STARTED";
+      }
+    }
+
+    return Object.assign(assignment, {
+      studentStatus,
+      submission: submissionDetail,
+      appeal: appealDetail,
     });
   }
 
