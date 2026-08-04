@@ -1,7 +1,8 @@
-import { DataSource, EntityManager, In } from "typeorm";
+import { DataSource, EntityManager, In, SelectQueryBuilder } from "typeorm";
 import { AppDataSource } from "../database/data-source.js";
 import { CourseLecturer } from "../entities/course-lecturer.js";
 import { Course } from "../entities/course.js";
+import { Enrollment } from "../entities/enrollment.js";
 import { LecturerPermission, MembershipStatus } from "../entities/enums.js";
 import { Lecturer } from "../entities/lecturer.js";
 
@@ -70,7 +71,7 @@ export class CourseRepository {
   }
 
   async findCoursesByLecturerId(lecturerId: string): Promise<Course[]> {
-    return this.dataSource
+    const qb = this.dataSource
       .getRepository(Course)
       .createQueryBuilder("course")
       .innerJoin(
@@ -84,12 +85,16 @@ export class CourseRepository {
       .leftJoinAndSelect("lecturer.user", "user")
       .orderBy("course.academic_year", "DESC")
       .addOrderBy("course.semester", "ASC")
-      .addOrderBy("course.name", "ASC")
-      .getMany();
+      .addOrderBy("course.name", "ASC");
+
+    this.addActiveStudentsCountSubquery(qb);
+
+    const rawAndEntities = await qb.getRawAndEntities();
+    return this.mapStudentsCount(rawAndEntities);
   }
 
   async findCoursesByStudentId(studentId: string): Promise<Course[]> {
-    return this.dataSource
+    const qb = this.dataSource
       .getRepository(Course)
       .createQueryBuilder("course")
       .innerJoin(
@@ -106,8 +111,12 @@ export class CourseRepository {
       .leftJoinAndSelect("lecturer.user", "user")
       .orderBy("course.academic_year", "DESC")
       .addOrderBy("course.semester", "ASC")
-      .addOrderBy("course.name", "ASC")
-      .getMany();
+      .addOrderBy("course.name", "ASC");
+
+    this.addActiveStudentsCountSubquery(qb);
+
+    const rawAndEntities = await qb.getRawAndEntities();
+    return this.mapStudentsCount(rawAndEntities);
   }
 
   async deleteCourse(courseId: string): Promise<boolean> {
@@ -132,19 +141,52 @@ export class CourseRepository {
     }
   }
 
-  private findCourseByIdWithManager(
+  private async findCourseByIdWithManager(
     manager: EntityManager,
     courseId: string,
   ): Promise<Course | null> {
-    return manager.getRepository(Course).findOne({
-      where: { id: courseId },
-      relations: {
-        lecturers: {
-          lecturer: {
-            user: true,
-          },
-        },
-      },
+    const qb = manager
+      .getRepository(Course)
+      .createQueryBuilder("course")
+      .where("course.id = :courseId", { courseId })
+      .leftJoinAndSelect("course.lecturers", "courseLecturer")
+      .leftJoinAndSelect("courseLecturer.lecturer", "lecturer")
+      .leftJoinAndSelect("lecturer.user", "user");
+
+    this.addActiveStudentsCountSubquery(qb);
+
+    const rawAndEntities = await qb.getRawAndEntities();
+    const courses = this.mapStudentsCount(rawAndEntities);
+    return courses[0] ?? null;
+  }
+
+  private addActiveStudentsCountSubquery(
+    qb: SelectQueryBuilder<Course>,
+  ): SelectQueryBuilder<Course> {
+    return qb.addSelect((subQuery) => {
+      return subQuery
+        .select("COUNT(enrollment.studentId)", "studentsCount")
+        .from(Enrollment, "enrollment")
+        .where("enrollment.courseId = course.id")
+        .andWhere("enrollment.status = :activeEnrollmentStatus", {
+          activeEnrollmentStatus: MembershipStatus.ACTIVE,
+        });
+    }, "course_students_count");
+  }
+
+  private mapStudentsCount(rawAndEntities: {
+    entities: Course[];
+    raw: Record<string, unknown>[];
+  }): Course[] {
+    return rawAndEntities.entities.map((entity, idx) => {
+      const raw = rawAndEntities.raw[idx];
+      const count =
+        raw?.course_students_count ??
+        raw?.studentsCount ??
+        raw?.course_studentsCount ??
+        0;
+      entity.studentsCount = Number(count);
+      return entity;
     });
   }
 }

@@ -11,6 +11,7 @@ import {
 import { Assignment } from "./assignment.js";
 import { CourseLecturer } from "./course-lecturer.js";
 import { Enrollment } from "./enrollment.js";
+import { Message } from "./message.js";
 import { Resource } from "./resource.js";
 
 @Entity({ name: "courses" })
@@ -51,9 +52,16 @@ export class Course {
   @OneToMany(() => Assignment, (assignment) => assignment.course)
   assignments!: Relation<Assignment>[];
 
+  @OneToMany(() => Message, (message) => message.course)
+  messages!: Relation<Message>[];
+
   @CreateDateColumn({ name: "created_at", type: "timestamptz" })
   createdAt!: Date;
 
   @UpdateDateColumn({ name: "updated_at", type: "timestamptz" })
   updatedAt!: Date;
+
+  // Unmapped/virtual aggregated property populated by query builders
+  studentsCount?: number;
 }
+

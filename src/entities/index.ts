@@ -7,6 +7,9 @@ import { Enrollment } from "./enrollment.js";
 import { Evaluation } from "./evaluation.js";
 import { FileAsset } from "./file-asset.js";
 import { Lecturer } from "./lecturer.js";
+import { Message } from "./message.js";
+import { MessageRecipient } from "./message-recipient.js";
+import { Notification } from "./notification.js";
 import { Resource } from "./resource.js";
 import { ResourceFile } from "./resource-file.js";
 import { Student } from "./student.js";
@@ -24,6 +27,9 @@ export * from "./enums.js";
 export { Evaluation } from "./evaluation.js";
 export { FileAsset } from "./file-asset.js";
 export { Lecturer } from "./lecturer.js";
+export { Message } from "./message.js";
+export { MessageRecipient } from "./message-recipient.js";
+export { Notification } from "./notification.js";
 export { Resource } from "./resource.js";
 export { ResourceFile } from "./resource-file.js";
 export { Student } from "./student.js";
@@ -43,8 +49,13 @@ export const DOMAIN_ENTITIES = [
   Submission,
   Evaluation,
   Appeal,
+  Notification,
+  Message,
+  MessageRecipient,
   FileAsset,
   ResourceFile,
   SubmissionFile,
   AppealFile,
 ];
+
+

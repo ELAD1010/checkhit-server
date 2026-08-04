@@ -16,4 +16,23 @@ export {
   type CreateUserInput,
   UserRepository,
 } from "./user.repository.js";
+export {
+  type CreateNotificationInput,
+  type FindNotificationsOptions,
+  NotificationNotFoundError,
+  NotificationRepository,
+  NotificationUserNotFoundError,
+} from "./notification.repository.js";
+export {
+  type CreateMessageInput,
+  type CreateReplyInput,
+  type FindUserMessagesOptions,
+  MessageCourseNotFoundError,
+  MessageInvalidRecipientError,
+  MessageNotFoundError,
+  MessageRepository,
+  MessageUserNotFoundError,
+  type PaginatedMessagesResult,
+} from "./message.repository.js";
+
 

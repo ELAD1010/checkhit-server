@@ -12,6 +12,9 @@ import {
   Submission,
   Evaluation,
   Appeal,
+  Notification,
+  Message,
+  MessageRecipient,
   UserRole,
   LecturerPermission,
   MembershipStatus,
@@ -19,7 +22,11 @@ import {
   SubmissionStatus,
   EvaluationStatus,
   AppealStatus,
+  NotificationCategory,
+  MessageTargetType,
 } from "./entities/index.js";
+
+
 
 interface LecturerSeedData {
   name: string;
@@ -953,9 +960,364 @@ async function seed() {
     }
 
     console.log("✓ Submissions, Evaluations, and Appeals seeded successfully.\n");
+
+    // ==========================================
+    // 9. SEED NOTIFICATIONS
+    // ==========================================
+    console.log("Seeding Notifications for Students & Lecturers...");
+    const notificationRepo = AppDataSource.getRepository(Notification);
+    await notificationRepo.createQueryBuilder().delete().execute();
+
+
+    if (george) {
+      const now = Date.now();
+      const bstAssignment = assignmentMap.get("Assignment 2: Balanced Binary Search Trees & AVL Rotations");
+      const georgeNotifications = [
+        {
+          recipientId: george.user.id,
+          title: "New Grade Entered",
+          body: "Your grade for Midterm Exam: Sorting & Complexity Analysis in CS201 has been entered (88/100).",
+          category: NotificationCategory.GRADE,
+          isRead: false,
+          link: midtermExam ? `/student/assignments/${midtermExam.id}` : "/student/assignments",
+          metadata: { assignmentId: midtermExam?.id, score: 88, maxScore: 100 },
+          createdAt: new Date(now - 10 * 60 * 1000), // 10 mins ago
+        },
+        {
+          recipientId: george.user.id,
+          title: "Appeal Accepted",
+          body: "The appeal you submitted for Lab 1: Linked Lists in CS201 was accepted. Your grade has been updated to 94.",
+          category: NotificationCategory.APPEAL,
+          isRead: false,
+          link: "/student/appeals",
+          metadata: { assignmentId: lab1?.id, newGrade: 94 },
+          createdAt: new Date(now - 2 * 60 * 60 * 1000), // 2 hours ago
+        },
+        {
+          recipientId: george.user.id,
+          title: "New Assignment Published",
+          body: "Assignment 2: Balanced Binary Search Trees has been published in CS201: Data Structures and Algorithms.",
+          category: NotificationCategory.ASSIGNMENT,
+          isRead: false,
+          link: bstAssignment ? `/student/assignments/${bstAssignment.id}` : "/student/assignments",
+          metadata: { assignmentId: bstAssignment?.id },
+          createdAt: new Date(now - 24 * 60 * 60 * 1000), // 1 day ago
+        },
+        {
+          recipientId: george.user.id,
+          title: "Approaching Submission Deadline",
+          body: "Assignment 1: A* Search and Heuristic Pathfinding is due in 3 days. Make sure to submit your solution.",
+          category: NotificationCategory.WARNING,
+          isRead: true,
+          readAt: new Date(now - 20 * 60 * 60 * 1000),
+          link: aStar ? `/student/assignments/${aStar.id}` : "/student/assignments",
+          metadata: { assignmentId: aStar?.id },
+          createdAt: new Date(now - 2 * 24 * 60 * 60 * 1000), // 2 days ago
+        },
+        {
+          recipientId: george.user.id,
+          title: "Course Announcement",
+          body: "Office hours for CS401: Artificial Intelligence have been rescheduled to Thursdays at 16:00.",
+          category: NotificationCategory.INFO,
+          isRead: true,
+          readAt: new Date(now - 48 * 60 * 60 * 1000),
+          link: "/student/courses",
+          metadata: { courseName: "CS401: Artificial Intelligence" },
+          createdAt: new Date(now - 3 * 24 * 60 * 60 * 1000), // 3 days ago
+        },
+        {
+          recipientId: george.user.id,
+          title: "Scheduled System Maintenance",
+          body: "The CheckHit AI grading engine will undergo routine maintenance this Saturday between 02:00 and 04:00.",
+          category: NotificationCategory.SYSTEM,
+          isRead: true,
+          readAt: new Date(now - 96 * 60 * 60 * 1000),
+          link: null,
+          metadata: null,
+          createdAt: new Date(now - 5 * 24 * 60 * 60 * 1000), // 5 days ago
+        },
+      ];
+
+      for (const notifData of georgeNotifications) {
+        const notif = notificationRepo.create(notifData);
+        await notificationRepo.save(notif);
+      }
+      console.log(`✓ Seeded ${georgeNotifications.length} notifications for student George Clark.`);
+    }
+
+    if (turing) {
+      const now = Date.now();
+      const lecturerNotifications = [
+        {
+          recipientId: turing.user.id,
+          title: "New Appeal Submitted",
+          body: "George Clark submitted an appeal for Midterm Paper in CS401: Artificial Intelligence.",
+          category: NotificationCategory.APPEAL,
+          isRead: false,
+          link: "/lecturer/appeals",
+          metadata: { studentName: "George Clark", course: "CS401" },
+          createdAt: new Date(now - 30 * 60 * 1000),
+        },
+        {
+          recipientId: turing.user.id,
+          title: "Submissions Ready for Review",
+          body: "12 students have submitted Lab 1: Linked Lists & Stack Implementations.",
+          category: NotificationCategory.ASSIGNMENT,
+          isRead: false,
+          link: "/lecturer/assignments",
+          metadata: { count: 12 },
+          createdAt: new Date(now - 3 * 60 * 60 * 1000),
+        },
+        {
+          recipientId: turing.user.id,
+          title: "Anomalous Similarity Detected",
+          body: "High similarity score (89%) detected between submissions in CS101 Assignment 1.",
+          category: NotificationCategory.WARNING,
+          isRead: true,
+          readAt: new Date(now - 12 * 60 * 60 * 1000),
+          link: "/lecturer/similarity-reports",
+          metadata: { similarityScore: 0.89 },
+          createdAt: new Date(now - 1 * 24 * 60 * 60 * 1000),
+        },
+      ];
+
+      for (const notifData of lecturerNotifications) {
+        const notif = notificationRepo.create(notifData);
+        await notificationRepo.save(notif);
+      }
+      console.log(`✓ Seeded ${lecturerNotifications.length} notifications for lecturer Dr. Alan Turing.`);
+    }
+
+
+    console.log("✓ Notifications seeded successfully.\n");
+
+    // 10. Seed Messages & Broadcasts
+    console.log("Seeding Messages & Threaded Conversations...");
+    const messageRepo = AppDataSource.getRepository(Message);
+    const messageRecipientRepo = AppDataSource.getRepository(MessageRecipient);
+
+    // Clean existing message records
+    await messageRecipientRepo.createQueryBuilder().delete().execute();
+    await messageRepo.createQueryBuilder().delete().execute();
+
+    const cs101Course = courseMap.get("CS101: Introduction to Computer Science");
+    const cs201Course = courseMap.get("CS201: Data Structures and Algorithms");
+    const cs401Course = courseMap.get("CS401: Artificial Intelligence");
+    const cs501Course = courseMap.get("CS501: Modern Software Engineering & Cloud Platforms");
+
+    const turingUser = lecturerMap.get("alan.turing@university.edu")?.user;
+    const knuthUser = lecturerMap.get("donald.knuth@university.edu")?.user;
+    const hamiltonUser = lecturerMap.get("margaret.hamilton@university.edu")?.user;
+
+    const georgeUser = studentMap.get("george.clark@student.university.edu")?.user;
+    const aliceUser = studentMap.get("alice.johnson@student.university.edu")?.user;
+    const bobUser = studentMap.get("bob.smith@student.university.edu")?.user;
+
+    if (turingUser && cs101Course) {
+      const now = Date.now();
+
+      // 1. Course Broadcast in CS101
+      const msg1 = messageRepo.create({
+        senderId: turingUser.id,
+        courseId: cs101Course.id,
+        targetType: MessageTargetType.BROADCAST,
+        subject: "Welcome to CS101: Introduction to Computer Science",
+        content: "Welcome everyone to CS101! Please ensure you have reviewed the syllabus and configured your IDE and Git repository before our next session.",
+        isPriority: false,
+        createdAt: new Date(now - 3 * 24 * 60 * 60 * 1000), // 3 days ago
+      });
+      await messageRepo.save(msg1);
+
+      // Recipients: all students in CS101
+      const cs101Enrollments = await enrollmentRepo.find({
+        where: { courseId: cs101Course.id },
+      });
+
+      for (const enr of cs101Enrollments) {
+        const isGeorge = georgeUser && enr.studentId === georgeUser.id;
+        const rec = messageRecipientRepo.create({
+          messageId: msg1.id,
+          recipientId: enr.studentId,
+          isRead: true,
+          readAt: new Date(now - 2 * 24 * 60 * 60 * 1000),
+          isArchived: false,
+        });
+        await messageRecipientRepo.save(rec);
+      }
+
+      // Replies to msg1
+      if (georgeUser) {
+        const rep1 = messageRepo.create({
+          senderId: georgeUser.id,
+          courseId: cs101Course.id,
+          targetType: MessageTargetType.BROADCAST,
+          subject: "Re: Welcome to CS101: Introduction to Computer Science",
+          content: "Thank you Dr. Turing! Environment configured and ready for the first assignment.",
+          parentMessageId: msg1.id,
+          createdAt: new Date(now - 2 * 24 * 60 * 60 * 1000),
+        });
+        await messageRepo.save(rep1);
+      }
+
+      if (aliceUser) {
+        const rep2 = messageRepo.create({
+          senderId: aliceUser.id,
+          courseId: cs101Course.id,
+          targetType: MessageTargetType.BROADCAST,
+          subject: "Re: Welcome to CS101: Introduction to Computer Science",
+          content: "Looking forward to this course!",
+          parentMessageId: msg1.id,
+          createdAt: new Date(now - 2 * 24 * 60 * 60 * 1000 + 30 * 60 * 1000),
+        });
+        await messageRepo.save(rep2);
+      }
+    }
+
+    if (turingUser && cs401Course) {
+      const now = Date.now();
+
+      // 2. High-priority broadcast in CS401
+      const msg2 = messageRepo.create({
+        senderId: turingUser.id,
+        courseId: cs401Course.id,
+        targetType: MessageTargetType.BROADCAST,
+        subject: "Important: A* Search Heuristics FAQ & Extra Office Hours",
+        content: "We have updated the problem set FAQ regarding admissible and consistent heuristic requirements. Additionally, an extra Q&A session will take place on Thursday at 4 PM in Hall B.",
+        isPriority: true,
+        createdAt: new Date(now - 4 * 60 * 60 * 1000), // 4 hours ago
+      });
+      await messageRepo.save(msg2);
+
+      const cs401Enrollments = await enrollmentRepo.find({
+        where: { courseId: cs401Course.id },
+      });
+
+      for (const enr of cs401Enrollments) {
+        const isGeorge = georgeUser && enr.studentId === georgeUser.id;
+        const rec = messageRecipientRepo.create({
+          messageId: msg2.id,
+          recipientId: enr.studentId,
+          isRead: !isGeorge, // Unread for George!
+          readAt: isGeorge ? null : new Date(now - 2 * 60 * 60 * 1000),
+          isArchived: false,
+        });
+        await messageRecipientRepo.save(rec);
+      }
+
+      if (bobUser) {
+        const repBob = messageRepo.create({
+          senderId: bobUser.id,
+          courseId: cs401Course.id,
+          targetType: MessageTargetType.BROADCAST,
+          subject: "Re: Important: A* Search Heuristics FAQ & Extra Office Hours",
+          content: "Will the session recording be uploaded to the portal?",
+          parentMessageId: msg2.id,
+          createdAt: new Date(now - 2 * 60 * 60 * 1000),
+        });
+        await messageRepo.save(repBob);
+      }
+
+      const repTuring = messageRepo.create({
+        senderId: turingUser.id,
+        courseId: cs401Course.id,
+        targetType: MessageTargetType.BROADCAST,
+        subject: "Re: Important: A* Search Heuristics FAQ & Extra Office Hours",
+        content: "Yes, the recording and slides will be uploaded right after the session.",
+        parentMessageId: msg2.id,
+        createdAt: new Date(now - 1 * 60 * 60 * 1000),
+      });
+      await messageRepo.save(repTuring);
+    }
+
+    if (georgeUser && turingUser && cs401Course) {
+      const now = Date.now();
+
+      // 3. Direct Message: George -> Turing
+      const msg3 = messageRepo.create({
+        senderId: georgeUser.id,
+        courseId: cs401Course.id,
+        targetType: MessageTargetType.DIRECT,
+        subject: "Question regarding Midterm Paper evaluation",
+        content: "Dear Dr. Turing, I reviewed the feedback on my paper regarding multi-head attention mechanisms. Could I schedule 10 minutes to discuss the literature citations suggestions?",
+        isPriority: false,
+        createdAt: new Date(now - 6 * 60 * 60 * 1000),
+      });
+      await messageRepo.save(msg3);
+
+      const recTuring = messageRecipientRepo.create({
+        messageId: msg3.id,
+        recipientId: turingUser.id,
+        isRead: true,
+        readAt: new Date(now - 5 * 60 * 60 * 1000),
+      });
+      await messageRecipientRepo.save(recTuring);
+
+      const repTuring = messageRepo.create({
+        senderId: turingUser.id,
+        courseId: cs401Course.id,
+        targetType: MessageTargetType.DIRECT,
+        subject: "Re: Question regarding Midterm Paper evaluation",
+        content: "Hi George, certainly. Please feel free to come by my office at 4:30 PM on Thursday right after the group review.",
+        parentMessageId: msg3.id,
+        createdAt: new Date(now - 3 * 60 * 60 * 1000),
+      });
+      await messageRepo.save(repTuring);
+    }
+
+    if (knuthUser && georgeUser && cs201Course) {
+      const now = Date.now();
+
+      // 4. Direct Message: Knuth -> George (Unread for George)
+      const msg4 = messageRepo.create({
+        senderId: knuthUser.id,
+        courseId: cs201Course.id,
+        targetType: MessageTargetType.DIRECT,
+        subject: "Commendation on Lab 1 implementation",
+        content: "Hello George, I wanted to personally commend you on the elegant pointer handling and edge-case unit tests in your Lab 1 submission. Excellent work.",
+        isPriority: true,
+        createdAt: new Date(now - 1 * 60 * 60 * 1000), // 1 hour ago
+      });
+      await messageRepo.save(msg4);
+
+      const recGeorge = messageRecipientRepo.create({
+        messageId: msg4.id,
+        recipientId: georgeUser.id,
+        isRead: false, // Unread
+      });
+      await messageRecipientRepo.save(recGeorge);
+    }
+
+    if (hamiltonUser && georgeUser && cs501Course) {
+      const now = Date.now();
+
+      // 5. Archived Direct Message: Hamilton -> George
+      const msg5 = messageRepo.create({
+        senderId: hamiltonUser.id,
+        courseId: cs501Course.id,
+        targetType: MessageTargetType.DIRECT,
+        subject: "Cloud Sandbox Provisioning Complete",
+        content: "Hello George, your AWS Educate sandbox environment has been successfully provisioned. You can access the cluster via the student dashboard.",
+        isPriority: false,
+        createdAt: new Date(now - 7 * 24 * 60 * 60 * 1000), // 7 days ago
+      });
+      await messageRepo.save(msg5);
+
+      const recGeorge = messageRecipientRepo.create({
+        messageId: msg5.id,
+        recipientId: georgeUser.id,
+        isRead: true,
+        readAt: new Date(now - 6 * 24 * 60 * 60 * 1000),
+        isArchived: true, // Archived
+      });
+      await messageRecipientRepo.save(recGeorge);
+    }
+
+    console.log("✓ Messages, broadcasts, and replies seeded successfully.\n");
+
     console.log("==========================================");
     console.log("  DATABASE DUMMY DATA SEEDING COMPLETE!   ");
     console.log("==========================================");
+
   } catch (error) {
     console.error("Error seeding dummy data:", error);
   } finally {
