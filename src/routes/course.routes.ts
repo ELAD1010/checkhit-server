@@ -5,6 +5,7 @@ import {
   getCourseById,
   getLecturerCourses,
   getStudentCourses,
+  getStudentUrgentCourses,
 } from "../controllers/course.controller.js";
 
 export const courseRouter = Router();
@@ -112,6 +113,19 @@ courseRouter.get("/lecturers/:lecturerId/courses", getLecturerCourses);
  *         schema:
  *           type: string
  *           format: uuid
+ *       - in: query
+ *         name: limit
+ *         required: false
+ *         description: Limit the number of courses returned
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *       - in: query
+ *         name: sortBy
+ *         required: false
+ *         description: Sort criteria (e.g. urgency, name, recent)
+ *         schema:
+ *           type: string
  *     responses:
  *       200:
  *         description: Courses
@@ -123,10 +137,66 @@ courseRouter.get("/lecturers/:lecturerId/courses", getLecturerCourses);
  *                 $ref: '#/components/schemas/Course'
  *       400:
  *         description: Invalid student ID
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
  *       500:
  *         description: Server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
  */
 courseRouter.get("/students/:studentId/courses", getStudentCourses);
+
+/**
+ * @openapi
+ * /students/{studentId}/courses/urgent:
+ *   get:
+ *     tags: [Courses, Students]
+ *     summary: Get enrolled courses sorted by urgency (upcoming assignment deadlines and open assignments)
+ *     parameters:
+ *       - in: path
+ *         name: studentId
+ *         required: true
+ *         description: Student user ID
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *       - in: query
+ *         name: limit
+ *         required: false
+ *         description: Limit the number of urgent courses returned (e.g. 3)
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *     responses:
+ *       200:
+ *         description: List of enrolled courses sorted by urgency with openAssignmentsCount and nextDueAt
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 $ref: '#/components/schemas/Course'
+ *       400:
+ *         description: Invalid student ID
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       500:
+ *         description: Server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
+courseRouter.get(
+  "/students/:studentId/courses/urgent",
+  getStudentUrgentCourses,
+);
 
 /**
  * @openapi

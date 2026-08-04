@@ -15,6 +15,13 @@ export const openApiComponents = {
         message: { type: "string" },
       },
     },
+    ErrorResponse: {
+      type: "object",
+      required: ["message"],
+      properties: {
+        message: { type: "string" },
+      },
+    },
     CreateUserRequest: {
       type: "object",
       required: ["name", "email"],
@@ -103,6 +110,16 @@ export const openApiComponents = {
           type: "integer",
           minimum: 0,
           description: "Number of active enrolled students in the course",
+        },
+        openAssignmentsCount: {
+          type: "integer",
+          minimum: 0,
+          description: "Number of unsubmitted published assignments in the course for the requesting student",
+        },
+        nextDueAt: {
+          type: ["string", "null"],
+          format: "date-time",
+          description: "Earliest upcoming due date among unsubmitted assignments",
         },
         createdAt: { type: "string", format: "date-time" },
         updatedAt: { type: "string", format: "date-time" },

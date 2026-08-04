@@ -19,8 +19,17 @@ export const getStudentAppeals = async (
     return;
   }
 
+  const limit = req.query.limit
+    ? parseInt(req.query.limit as string, 10)
+    : undefined;
+  const status =
+    typeof req.query.status === "string" ? req.query.status : undefined;
+
   try {
-    const appeals = await appealRepository.findAppealsByStudentId(studentId);
+    const appeals = await appealRepository.findAppealsByStudentId(studentId, {
+      limit: limit && !isNaN(limit) ? limit : undefined,
+      status,
+    });
     res.json(appeals);
   } catch (error) {
     if (error instanceof AppealStudentNotFoundError) {

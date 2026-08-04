@@ -1,10 +1,17 @@
 import { DataSource, EntityManager, In, SelectQueryBuilder } from "typeorm";
 import { AppDataSource } from "../database/data-source.js";
+import { Assignment } from "../entities/assignment.js";
 import { CourseLecturer } from "../entities/course-lecturer.js";
 import { Course } from "../entities/course.js";
 import { Enrollment } from "../entities/enrollment.js";
-import { LecturerPermission, MembershipStatus } from "../entities/enums.js";
+import {
+  AssignmentStatus,
+  LecturerPermission,
+  MembershipStatus,
+  SubmissionStatus,
+} from "../entities/enums.js";
 import { Lecturer } from "../entities/lecturer.js";
+import { Submission } from "../entities/submission.js";
 
 export type CreateCourseInput = {
   name: string;
@@ -13,6 +20,11 @@ export type CreateCourseInput = {
   lecturerIds: string[];
   ltiContextId?: string | null;
 };
+
+export interface StudentCoursesQueryOptions {
+  limit?: number;
+  sortBy?: "urgency" | "name" | "recent" | string;
+}
 
 export class LecturersNotFoundError extends Error {
   constructor(readonly lecturerIds: string[]) {
@@ -93,7 +105,14 @@ export class CourseRepository {
     return this.mapStudentsCount(rawAndEntities);
   }
 
-  async findCoursesByStudentId(studentId: string): Promise<Course[]> {
+  async findCoursesByStudentId(
+    studentId: string,
+    options?: StudentCoursesQueryOptions,
+  ): Promise<Course[]> {
+    if (options?.sortBy === "urgency") {
+      return this.findUrgentCoursesByStudentId(studentId, options.limit);
+    }
+
     const qb = this.dataSource
       .getRepository(Course)
       .createQueryBuilder("course")
@@ -116,7 +135,134 @@ export class CourseRepository {
     this.addActiveStudentsCountSubquery(qb);
 
     const rawAndEntities = await qb.getRawAndEntities();
-    return this.mapStudentsCount(rawAndEntities);
+    const courses = this.mapStudentsCount(rawAndEntities);
+
+    if (options?.limit && options.limit > 0) {
+      return courses.slice(0, options.limit);
+    }
+
+    return courses;
+  }
+
+  async findUrgentCoursesByStudentId(
+    studentId: string,
+    limit?: number,
+  ): Promise<Course[]> {
+    const courses = await this.findCoursesByStudentId(studentId);
+    if (courses.length === 0) {
+      return [];
+    }
+
+    const courseIds = courses.map((c) => c.id);
+    const assignments = await this.dataSource.getRepository(Assignment).find({
+      where: {
+        courseId: In(courseIds),
+        status: AssignmentStatus.PUBLISHED,
+      },
+      order: {
+        dueAt: "ASC",
+      },
+    });
+
+    const assignmentIds = assignments.map((a) => a.id);
+    const submissions =
+      assignmentIds.length > 0
+        ? await this.dataSource.getRepository(Submission).find({
+            where: {
+              studentId,
+              assignmentId: In(assignmentIds),
+            },
+          })
+        : [];
+
+    const submittedAssignmentIds = new Set(
+      submissions
+        .filter((s) => s.status === SubmissionStatus.SUBMITTED)
+        .map((s) => s.assignmentId),
+    );
+
+    const now = new Date();
+
+    const courseUrgencyMap = new Map<
+      string,
+      {
+        openAssignmentsCount: number;
+        nextDueAt: Date | null;
+        hasOverdue: boolean;
+        earliestDueTime: number;
+      }
+    >();
+
+    for (const course of courses) {
+      const courseAssignments = assignments.filter(
+        (a) => a.courseId === course.id,
+      );
+      const unsubmitted = courseAssignments.filter(
+        (a) => !submittedAssignmentIds.has(a.id),
+      );
+
+      let nextDueAt: Date | null = null;
+      let hasOverdue = false;
+      let earliestDueTime = Infinity;
+
+      for (const a of unsubmitted) {
+        if (a.dueAt) {
+          const dueTime = new Date(a.dueAt).getTime();
+          if (dueTime >= now.getTime()) {
+            if (!nextDueAt || dueTime < earliestDueTime) {
+              nextDueAt = new Date(a.dueAt);
+              earliestDueTime = dueTime;
+            }
+          } else {
+            hasOverdue = true;
+          }
+        }
+      }
+
+      course.openAssignmentsCount = unsubmitted.length;
+      course.nextDueAt = nextDueAt;
+
+      courseUrgencyMap.set(course.id, {
+        openAssignmentsCount: unsubmitted.length,
+        nextDueAt,
+        hasOverdue,
+        earliestDueTime,
+      });
+    }
+
+    // Sort courses by urgency:
+    // 1. Has upcoming deadline (earliest nextDueAt first)
+    // 2. Has overdue unsubmitted assignments
+    // 3. Has open assignments without deadline
+    // 4. No open assignments
+    courses.sort((a, b) => {
+      const urgA = courseUrgencyMap.get(a.id)!;
+      const urgB = courseUrgencyMap.get(b.id)!;
+
+      const hasUpcomingA = urgA.nextDueAt !== null;
+      const hasUpcomingB = urgB.nextDueAt !== null;
+
+      if (hasUpcomingA && hasUpcomingB) {
+        return urgA.earliestDueTime - urgB.earliestDueTime;
+      }
+      if (hasUpcomingA) return -1;
+      if (hasUpcomingB) return 1;
+
+      if (urgA.hasOverdue && !urgB.hasOverdue) return -1;
+      if (!urgA.hasOverdue && urgB.hasOverdue) return 1;
+
+      if (urgA.openAssignmentsCount !== urgB.openAssignmentsCount) {
+        return urgB.openAssignmentsCount - urgA.openAssignmentsCount;
+      }
+
+      return a.name.localeCompare(b.name);
+    });
+
+    if (limit && limit > 0) {
+      return courses.slice(0, limit);
+    }
+
+    return courses;
   }
 
   async deleteCourse(courseId: string): Promise<boolean> {

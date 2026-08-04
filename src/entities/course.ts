@@ -63,5 +63,7 @@ export class Course {
 
   // Unmapped/virtual aggregated property populated by query builders
   studentsCount?: number;
+  openAssignmentsCount?: number;
+  nextDueAt?: Date | null;
 }
 
