@@ -5,6 +5,7 @@ import {
   getAllStudentAssignments,
   getAssignmentById,
   getCourseAssignments,
+  getLecturerAssignmentOverview,
   getStudentAssignmentDetail,
   getStudentCourseAssignments,
   getStudentRecentGrades,
@@ -377,3 +378,62 @@ assignmentRouter.get(
  *         description: Server error
  */
 assignmentRouter.delete("/assignments/:assignmentId", deleteAssignment);
+
+/**
+ * @openapi
+ * /assignments/{assignmentId}/lecturer-overview:
+ *   get:
+ *     tags: [Assignments, Lecturers]
+ *     summary: Get lecturer overview for an assignment (metadata, KPIs, and complete student roster)
+ *     parameters:
+ *       - in: path
+ *         name: assignmentId
+ *         required: true
+ *         description: Assignment ID
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *       - in: query
+ *         name: search
+ *         required: false
+ *         description: Filter students by name, email, or student number
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: status
+ *         required: false
+ *         description: Filter student submissions by status (GRADED, EVALUATING, SUBMITTED, NOT_STARTED, OVERDUE, APPEAL)
+ *         schema:
+ *           type: string
+ *           enum: [GRADED, EVALUATING, SUBMITTED, NOT_STARTED, OVERDUE, APPEAL]
+ *     responses:
+ *       200:
+ *         description: Lecturer assignment overview with stats and student roster
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/LecturerAssignmentOverviewResponse'
+ *       400:
+ *         description: Invalid assignment ID
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       404:
+ *         description: Assignment not found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       500:
+ *         description: Server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
+assignmentRouter.get(
+  "/assignments/:assignmentId/lecturer-overview",
+  getLecturerAssignmentOverview,
+);
+

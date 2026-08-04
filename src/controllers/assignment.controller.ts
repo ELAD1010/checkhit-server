@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import { AssignmentStatus } from "../entities/enums.js";
 import {
   AssignmentCourseNotFoundError,
+  AssignmentNotFoundError,
   AssignmentRepository,
   AssignmentStudentNotFoundError,
   CreateAssignmentInput,
@@ -388,5 +389,43 @@ export const deleteAssignment = async (
   } catch (error) {
     console.error("Failed to delete assignment:", error);
     res.status(500).json({ message: "Failed to delete assignment" });
+  }
+};
+
+export const getLecturerAssignmentOverview = async (
+  req: Request,
+  res: Response,
+): Promise<void> => {
+  const assignmentId =
+    typeof req.params.assignmentId === "string"
+      ? req.params.assignmentId
+      : undefined;
+
+  if (!assignmentId || !isUuid(assignmentId)) {
+    res.status(400).json({ message: "A valid assignment ID is required" });
+    return;
+  }
+
+  const search =
+    typeof req.query.search === "string" ? req.query.search : undefined;
+  const status =
+    typeof req.query.status === "string" ? req.query.status : undefined;
+
+  try {
+    const overview = await assignmentRepository.findLecturerAssignmentOverview(
+      assignmentId,
+      { search, status },
+    );
+    res.json(overview);
+  } catch (error) {
+    if (error instanceof AssignmentNotFoundError) {
+      res.status(404).json({ message: error.message });
+      return;
+    }
+
+    console.error("Failed to fetch lecturer assignment overview:", error);
+    res
+      .status(500)
+      .json({ message: "Failed to fetch lecturer assignment overview" });
   }
 };
