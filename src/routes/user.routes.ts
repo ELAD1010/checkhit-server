@@ -2,6 +2,7 @@ import { Router } from "express";
 import {
   createLecturer,
   getLecturerById,
+  getLecturerDashboard,
 } from "../controllers/lecturer.controller.js";
 import {
   createStudent,
@@ -10,6 +11,7 @@ import {
 } from "../controllers/student.controller.js";
 
 export const userRouter = Router();
+
 
 /**
  * @openapi
@@ -156,3 +158,46 @@ userRouter.post("/lecturers", createLecturer);
  *         description: Server error
  */
 userRouter.get("/lecturers/:lecturerId", getLecturerById);
+
+/**
+ * @openapi
+ * /lecturers/{lecturerId}/dashboard:
+ *   get:
+ *     tags: [Lecturers, Dashboard]
+ *     summary: Get aggregated dashboard data for a lecturer
+ *     description: Returns high-level KPIs, triage alerts (Requires Attention), grade distribution analytics, assignment completion funnel, and active courses.
+ *     parameters:
+ *       - in: path
+ *         name: lecturerId
+ *         required: true
+ *         description: Lecturer user ID (UUID)
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     responses:
+ *       200:
+ *         description: Aggregated lecturer dashboard data
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/LecturerDashboardResponse'
+ *       400:
+ *         description: Invalid lecturer ID
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       404:
+ *         description: Lecturer not found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       500:
+ *         description: Internal server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
+userRouter.get("/lecturers/:lecturerId/dashboard", getLecturerDashboard);

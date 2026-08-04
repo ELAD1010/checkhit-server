@@ -589,7 +589,163 @@ export const openApiComponents = {
         unreadCount: { type: "integer" },
       },
     },
+    LecturerDashboardKpis: {
+      type: "object",
+      required: [
+        "activeCourses",
+        "pendingAppeals",
+        "readyToPublish",
+        "averageScore",
+      ],
+      properties: {
+        activeCourses: { type: "integer" },
+        pendingAppeals: { type: "integer" },
+        readyToPublish: { type: "integer" },
+        averageScore: { type: "number" },
+      },
+    },
+    RequiresAttentionItem: {
+      type: "object",
+      required: [
+        "id",
+        "type",
+        "title",
+        "subtitle",
+        "actionText",
+        "actionHref",
+        "accentColor",
+      ],
+      properties: {
+        id: { type: "string" },
+        type: { type: "string", enum: ["appeal", "ai-grading", "deadline"] },
+        title: { type: "string" },
+        subtitle: { type: "string" },
+        actionText: { type: "string" },
+        actionHref: { type: "string" },
+        accentColor: { type: "string" },
+      },
+    },
+    GradeDistributionRange: {
+      type: "object",
+      required: ["rangeKey", "label", "count", "color", "darkColor"],
+      properties: {
+        rangeKey: { type: "string" },
+        label: { type: "string" },
+        count: { type: "integer" },
+        color: { type: "string" },
+        darkColor: { type: "string" },
+      },
+    },
+    GradeDistributionCourseData: {
+      type: "object",
+      required: [
+        "courseId",
+        "courseName",
+        "average",
+        "median",
+        "passRate",
+        "totalStudents",
+        "data",
+      ],
+      properties: {
+        courseId: { type: "string" },
+        code: { type: "string" },
+        courseName: { type: "string" },
+        average: { type: "number" },
+        median: { type: "number" },
+        passRate: { type: "number" },
+        totalStudents: { type: "integer" },
+        data: {
+          type: "array",
+          items: { $ref: "#/components/schemas/GradeDistributionRange" },
+        },
+      },
+    },
+    GradeDistributionData: {
+      type: "object",
+      required: ["all", "byCourse"],
+      properties: {
+        all: { $ref: "#/components/schemas/GradeDistributionCourseData" },
+        byCourse: {
+          type: "array",
+          items: { $ref: "#/components/schemas/GradeDistributionCourseData" },
+        },
+      },
+    },
+    AssignmentCompletionItem: {
+      type: "object",
+      required: [
+        "assignmentId",
+        "name",
+        "code",
+        "graded",
+        "aiChecking",
+        "submitted",
+        "missing",
+        "total",
+      ],
+      properties: {
+        assignmentId: { type: "string", format: "uuid" },
+        name: { type: "string" },
+        code: { type: "string" },
+        graded: { type: "integer" },
+        aiChecking: { type: "integer" },
+        submitted: { type: "integer" },
+        missing: { type: "integer" },
+        total: { type: "integer" },
+      },
+    },
+    DashboardCourseItem: {
+      type: "object",
+      required: [
+        "id",
+        "name",
+        "code",
+        "studentsCount",
+        "activeAssignments",
+        "academicYear",
+        "semester",
+      ],
+      properties: {
+        id: { type: "string", format: "uuid" },
+        name: { type: "string" },
+        code: { type: "string" },
+        studentsCount: { type: "integer" },
+        activeAssignments: { type: "integer" },
+        academicYear: { type: "integer" },
+        semester: { type: "string" },
+      },
+    },
+    LecturerDashboardResponse: {
+      type: "object",
+      required: [
+        "kpis",
+        "requiresAttention",
+        "gradeDistribution",
+        "assignmentCompletion",
+        "recentCourses",
+      ],
+      properties: {
+        kpis: { $ref: "#/components/schemas/LecturerDashboardKpis" },
+        requiresAttention: {
+          type: "array",
+          items: { $ref: "#/components/schemas/RequiresAttentionItem" },
+        },
+        gradeDistribution: {
+          $ref: "#/components/schemas/GradeDistributionData",
+        },
+        assignmentCompletion: {
+          type: "array",
+          items: { $ref: "#/components/schemas/AssignmentCompletionItem" },
+        },
+        recentCourses: {
+          type: "array",
+          items: { $ref: "#/components/schemas/DashboardCourseItem" },
+        },
+      },
+    },
   },
 } as const;
+
 
 
