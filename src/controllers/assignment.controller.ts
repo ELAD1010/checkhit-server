@@ -260,9 +260,27 @@ export const getAllStudentAssignments = async (
     return;
   }
 
+  const limit = req.query.limit
+    ? parseInt(req.query.limit as string, 10)
+    : undefined;
+  const status =
+    typeof req.query.status === "string" ? req.query.status : undefined;
+  const upcoming =
+    req.query.upcoming === "true" || req.query.upcoming === "1";
+  const sort =
+    typeof req.query.sort === "string" ? req.query.sort : undefined;
+
   try {
     const assignments =
-      await assignmentRepository.findAllStudentAssignmentsWithStatus(studentId);
+      await assignmentRepository.findAllStudentAssignmentsWithStatus(
+        studentId,
+        {
+          limit: limit && !isNaN(limit) ? limit : undefined,
+          status,
+          upcoming,
+          sort,
+        },
+      );
     res.json(assignments);
   } catch (error) {
     if (error instanceof AssignmentStudentNotFoundError) {
@@ -272,6 +290,39 @@ export const getAllStudentAssignments = async (
 
     console.error("Failed to fetch student assignments:", error);
     res.status(500).json({ message: "Failed to fetch student assignments" });
+  }
+};
+
+export const getStudentRecentGrades = async (
+  req: Request,
+  res: Response,
+): Promise<void> => {
+  const studentId =
+    typeof req.params.studentId === "string" ? req.params.studentId : undefined;
+
+  if (!studentId || !isUuid(studentId)) {
+    res.status(400).json({ message: "A valid student ID is required" });
+    return;
+  }
+
+  const limit = req.query.limit
+    ? parseInt(req.query.limit as string, 10)
+    : 5;
+
+  try {
+    const grades = await assignmentRepository.findStudentRecentGrades(
+      studentId,
+      !isNaN(limit) && limit > 0 ? limit : 5,
+    );
+    res.json(grades);
+  } catch (error) {
+    if (error instanceof AssignmentStudentNotFoundError) {
+      res.status(404).json({ message: error.message });
+      return;
+    }
+
+    console.error("Failed to fetch student recent grades:", error);
+    res.status(500).json({ message: "Failed to fetch student recent grades" });
   }
 };
 

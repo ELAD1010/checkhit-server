@@ -16,6 +16,7 @@ Welcome to the **CheckHit API** documentation. This REST API facilitates managin
    - [Get Student by ID (`GET /api/students/{studentId}`)](#get-apistudentsstudentid)
    - [Get Enrolled Students for a Course (`GET /api/courses/{courseId}/students`)](#get-apicoursescourseidstudents)
    - [Get All Student Assignments Across All Courses (`GET /api/students/{studentId}/assignments`)](#get-apistudentsstudentidassignments)
+   - [Get Student Recent Graded Assignments (`GET /api/students/{studentId}/grades`)](#get-apistudentsstudentidgrades)
    - [Get Course Assignments with Student Completion Status (`GET /api/students/{studentId}/courses/{courseId}/assignments`)](#get-apistudentsstudentidcoursescourseidassignments)
    - [Get Student Appeals (`GET /api/students/{studentId}/appeals`)](#get-apistudentsstudentidappeals)
 3. [2. Lecturers Endpoints](#2-lecturers)
@@ -27,10 +28,12 @@ Welcome to the **CheckHit API** documentation. This REST API facilitates managin
    - [Delete a Course (`DELETE /api/courses/{courseId}`)](#delete-apicoursescourseid)
    - [Get Courses Managed by a Lecturer (`GET /api/lecturers/{lecturerId}/courses`)](#get-apilecturerslectureridcourses)
    - [Get Courses for an Enrolled Student (`GET /api/students/{studentId}/courses`)](#get-apistudentsstudentidcourses)
+   - [Get Enrolled Courses Sorted by Urgency (`GET /api/students/{studentId}/courses/urgent`)](#get-apistudentsstudentidcoursesurgent)
 5. [4. Assignments Endpoints](#4-assignments)
    - [Create an Assignment (`POST /api/courses/{courseId}/assignments`)](#post-apicoursescourseidassignments)
    - [Get Assignments for a Course (`GET /api/courses/{courseId}/assignments`)](#get-apicoursescourseidassignments)
    - [Get All Student Assignments Across All Courses (`GET /api/students/{studentId}/assignments`)](#get-apistudentsstudentidassignments-1)
+   - [Get Student Recent Graded Assignments (`GET /api/students/{studentId}/grades`)](#get-apistudentsstudentidgrades-1)
    - [Get Course Assignments with Student Completion Status (`GET /api/students/{studentId}/courses/{courseId}/assignments`)](#get-apistudentsstudentidcoursescourseidassignments-1)
    - [Get Assignment by ID (`GET /api/assignments/{assignmentId}`)](#get-apiassignmentsassignmentid)
    - [Delete an Assignment (`DELETE /api/assignments/{assignmentId}`)](#delete-apiassignmentsassignmentid)
@@ -291,6 +294,11 @@ Retrieves all assignments across all courses where the student is actively enrol
 - **Tags**: `Students`, `Assignments`
 - **Path Parameters**:
   - `studentId` (`uuid`, required): The student user ID.
+- **Query Parameters**:
+  - `limit` (`integer`, optional): Limit the number of assignments returned (e.g. `?limit=5`).
+  - `status` (`string`, optional): Filter by status (`"UPCOMING"`, `"GRADED"`, `"NOT_STARTED"`, `"DRAFT"`, `"SUBMITTED"`, `"OVERDUE"`).
+  - `upcoming` (`boolean`, optional): When `true`, returns only active/unsubmitted assignments sorted with earliest upcoming deadline first (`dueAt ASC`).
+  - `sort` (`string`, optional): Sorting criteria (e.g. `"dueAt:asc"`, `"dueAt:desc"`, `"gradedAt:desc"`, `"createdAt:desc"`).
 - **Responses**:
   - **`200 OK`**: Array of `StudentAssignment` objects across all enrolled courses.
     ```json
@@ -427,12 +435,31 @@ Retrieves all assignments in a course along with the completion status, latest s
 
 ---
 
+### `GET /api/students/{studentId}/grades`
+Retrieves student's graded assignments sorted by evaluation/submission date descending (latest grades first).
+
+- **Tags**: `Students`, `Assignments`
+- **Path Parameters**:
+  - `studentId` (`uuid`, required): The student user ID.
+- **Query Parameters**:
+  - `limit` (`integer`, optional): Number of recent grades to fetch (`default: 5`).
+- **Responses**:
+  - **`200 OK`**: Array of graded `StudentAssignment` objects.
+  - **`400 Bad Request`**: Invalid student ID format.
+  - **`404 Not Found`**: Student not found.
+  - **`500 Internal Server Error`**: Server error.
+
+---
+
 ### `GET /api/students/{studentId}/appeals`
 Retrieves all grade appeals submitted by a student across all courses and assignments, including initial evaluations, submission details, reviewer information, and resolution status.
 
 - **Tags**: `Students`, `Appeals`
 - **Path Parameters**:
   - `studentId` (`uuid`, required): The student user ID.
+- **Query Parameters**:
+  - `limit` (`integer`, optional): Number of appeals to fetch (e.g. `?limit=3`).
+  - `status` (`string`, optional): Filter by status (`"IN_PROGRESS"` for submitted/under-review appeals, or exact status `"SUBMITTED"`, `"UNDER_REVIEW"`, `"ACCEPTED"`, `"REJECTED"`, `"CANCELLED"`).
 - **Responses**:
   - **`200 OK`**: Array of `Appeal` objects.
     ```json
@@ -647,10 +674,46 @@ Retrieves all courses where the specified student is actively enrolled.
 - **Tags**: `Courses`, `Students`
 - **Path Parameters**:
   - `studentId` (`uuid`, required): Student's user ID.
+- **Query Parameters**:
+  - `limit` (`integer`, optional): Limit number of courses returned.
+  - `sortBy` (`string`, optional): Sort criteria (`"urgency"`, `"name"`, `"recent"`).
 - **Responses**:
   - **`200 OK`**: Array of `Course` objects.
   - **`400 Bad Request`**: Invalid student ID.
   - **`500 Internal Server Error`**: Server error.
+
+---
+
+### `GET /api/students/{studentId}/courses/urgent`
+Retrieves enrolled courses prioritized by urgency: courses with upcoming unsubmitted assignment deadlines appear first (ordered by nearest deadline `nextDueAt`), followed by courses with overdue tasks, and finally courses with open assignments without due dates. Each course includes `openAssignmentsCount` and `nextDueAt`.
+
+- **Tags**: `Courses`, `Students`
+- **Path Parameters**:
+  - `studentId` (`uuid`, required): Student's user ID.
+- **Query Parameters**:
+  - `limit` (`integer`, optional): Limit number of urgent courses returned (e.g. `?limit=3`).
+- **Responses**:
+  - **`200 OK`**: Array of `Course` objects sorted by urgency.
+    ```json
+    [
+      {
+        "id": "9ac59487-edce-4306-b2d4-6f8c75c65cf6",
+        "name": "CS201: Data Structures and Algorithms",
+        "semester": "Fall",
+        "academicYear": 2026,
+        "ltiContextId": null,
+        "lecturers": [...],
+        "studentsCount": 6,
+        "openAssignmentsCount": 2,
+        "nextDueAt": "2026-08-10T23:59:59.000Z",
+        "createdAt": "2026-08-02T13:54:23.000Z",
+        "updatedAt": "2026-08-02T13:54:23.000Z"
+      }
+    ]
+    ```
+  - **`400 Bad Request`**: Invalid student ID.
+  - **`500 Internal Server Error`**: Server error.
+
 
 ---
 

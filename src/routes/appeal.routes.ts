@@ -17,6 +17,19 @@ export const appealRouter = Router();
  *         schema:
  *           type: string
  *           format: uuid
+ *       - in: query
+ *         name: limit
+ *         required: false
+ *         description: Limit the number of appeals returned
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *       - in: query
+ *         name: status
+ *         required: false
+ *         description: Filter by appeal status (e.g. IN_PROGRESS, SUBMITTED, UNDER_REVIEW, ACCEPTED, REJECTED, CANCELLED)
+ *         schema:
+ *           type: string
  *     responses:
  *       200:
  *         description: Array of student appeals with related submission, evaluation, and assignment details

@@ -55,6 +55,13 @@ export type StudentAssignmentResult = Assignment & {
   submission: StudentAssignmentSubmissionSummary | null;
 };
 
+export interface StudentAssignmentsQueryOptions {
+  limit?: number;
+  status?: string;
+  upcoming?: boolean;
+  sort?: string;
+}
+
 export class AssignmentCourseNotFoundError extends Error {
   constructor(readonly courseId: string) {
     super(`Course not found: ${courseId}`);
@@ -253,6 +260,7 @@ export class AssignmentRepository {
 
   async findAllStudentAssignmentsWithStatus(
     studentId: string,
+    options?: StudentAssignmentsQueryOptions,
   ): Promise<StudentAssignmentResult[]> {
     const studentExists = await this.dataSource
       .getRepository(Student)
@@ -313,7 +321,7 @@ export class AssignmentRepository {
 
     const now = new Date();
 
-    return assignments.map((assignment) => {
+    let results: StudentAssignmentResult[] = assignments.map((assignment) => {
       const submission = latestSubmissionByAssignment.get(assignment.id);
       let studentStatus: StudentAssignmentStatus = "NOT_STARTED";
       let submissionSummary: StudentAssignmentSubmissionSummary | null = null;
@@ -364,6 +372,91 @@ export class AssignmentRepository {
         studentStatus,
         submission: submissionSummary,
       });
+    });
+
+    // Handle upcoming filter (unsubmitted or in-progress assignments with upcoming deadlines)
+    if (options?.upcoming || options?.status?.toUpperCase() === "UPCOMING") {
+      results = results.filter(
+        (a) =>
+          a.status === AssignmentStatus.PUBLISHED &&
+          (a.studentStatus === "NOT_STARTED" ||
+            a.studentStatus === "DRAFT" ||
+            a.studentStatus === "OVERDUE"),
+      );
+
+      // Sort upcoming by closest due date first, assignments without due date at the end
+      results.sort((a, b) => {
+        if (!a.dueAt && !b.dueAt) return 0;
+        if (!a.dueAt) return 1;
+        if (!b.dueAt) return -1;
+        return new Date(a.dueAt).getTime() - new Date(b.dueAt).getTime();
+      });
+    } else if (options?.status) {
+      const targetStatus = options.status.toUpperCase();
+      if (targetStatus === "GRADED") {
+        results = results.filter(
+          (a) =>
+            a.studentStatus === "GRADED" ||
+            (a.submission?.evaluation &&
+              a.submission.evaluation.status === EvaluationStatus.COMPLETED),
+        );
+      } else {
+        results = results.filter(
+          (a) => a.studentStatus.toUpperCase() === targetStatus,
+        );
+      }
+    }
+
+    // Handle explicit sorting
+    if (options?.sort) {
+      const [field, dir] = options.sort.split(":");
+      const isAsc = dir?.toLowerCase() === "asc";
+
+      if (field === "dueAt") {
+        results.sort((a, b) => {
+          if (!a.dueAt && !b.dueAt) return 0;
+          if (!a.dueAt) return 1;
+          if (!b.dueAt) return -1;
+          const diff =
+            new Date(a.dueAt).getTime() - new Date(b.dueAt).getTime();
+          return isAsc ? diff : -diff;
+        });
+      } else if (field === "gradedAt" || field === "submittedAt") {
+        results.sort((a, b) => {
+          const timeA = a.submission?.submittedAt
+            ? new Date(a.submission.submittedAt).getTime()
+            : 0;
+          const timeB = b.submission?.submittedAt
+            ? new Date(b.submission.submittedAt).getTime()
+            : 0;
+          const diff = timeA - timeB;
+          return isAsc ? diff : -diff;
+        });
+      } else if (field === "createdAt") {
+        results.sort((a, b) => {
+          const diff =
+            new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+          return isAsc ? diff : -diff;
+        });
+      }
+    }
+
+    // Apply limit if specified
+    if (options?.limit && options.limit > 0) {
+      results = results.slice(0, options.limit);
+    }
+
+    return results;
+  }
+
+  async findStudentRecentGrades(
+    studentId: string,
+    limit: number = 5,
+  ): Promise<StudentAssignmentResult[]> {
+    return this.findAllStudentAssignmentsWithStatus(studentId, {
+      status: "GRADED",
+      sort: "gradedAt:desc",
+      limit,
     });
   }
 

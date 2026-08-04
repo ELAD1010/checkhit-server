@@ -6,6 +6,7 @@ import {
   getAssignmentById,
   getCourseAssignments,
   getStudentCourseAssignments,
+  getStudentRecentGrades,
 } from "../controllers/assignment.controller.js";
 
 export const assignmentRouter = Router();
@@ -134,6 +135,31 @@ assignmentRouter.get(
  *         schema:
  *           type: string
  *           format: uuid
+ *       - in: query
+ *         name: limit
+ *         required: false
+ *         description: Limit the number of assignments returned
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *       - in: query
+ *         name: status
+ *         required: false
+ *         description: Filter by status (UPCOMING, GRADED, NOT_STARTED, DRAFT, SUBMITTED, OVERDUE)
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: upcoming
+ *         required: false
+ *         description: Set to true to return only active/upcoming unsubmitted assignments sorted by dueAt ASC
+ *         schema:
+ *           type: boolean
+ *       - in: query
+ *         name: sort
+ *         required: false
+ *         description: Sort order (e.g. dueAt:asc, dueAt:desc, gradedAt:desc, createdAt:desc)
+ *         schema:
+ *           type: string
  *     responses:
  *       200:
  *         description: Assignments with student completion status and course details
@@ -165,6 +191,61 @@ assignmentRouter.get(
 assignmentRouter.get(
   "/students/:studentId/assignments",
   getAllStudentAssignments,
+);
+
+/**
+ * @openapi
+ * /students/{studentId}/grades:
+ *   get:
+ *     tags: [Assignments, Students]
+ *     summary: Get student recent graded assignments sorted by evaluation date descending
+ *     parameters:
+ *       - in: path
+ *         name: studentId
+ *         required: true
+ *         description: Student user ID
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *       - in: query
+ *         name: limit
+ *         required: false
+ *         description: Number of recent grades to fetch (defaults to 5)
+ *         schema:
+ *           type: integer
+ *           default: 5
+ *           minimum: 1
+ *     responses:
+ *       200:
+ *         description: List of recently graded assignments with scores and feedback
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 $ref: '#/components/schemas/StudentAssignment'
+ *       400:
+ *         description: Invalid student ID
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       404:
+ *         description: Student not found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       500:
+ *         description: Server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
+assignmentRouter.get(
+  "/students/:studentId/grades",
+  getStudentRecentGrades,
 );
 
 /**
