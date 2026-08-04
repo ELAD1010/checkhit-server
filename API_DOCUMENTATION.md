@@ -38,8 +38,23 @@ Welcome to the **CheckHit API** documentation. This REST API facilitates managin
    - [Get Student Appeals (`GET /api/students/{studentId}/appeals`)](#get-apistudentsstudentidappeals-1)
 7. [6. LTI Integration Endpoints](#6-lti-integration)
    - [Generate Deep-Link Form (`POST /api/generate-deeplink`)](#post-apigenerate-deeplink)
+8. [7. Notifications Endpoints](#7-notifications)
+   - [Get User Notifications (`GET /api/users/{userId}/notifications`)](#get-apiusersuseridnotifications)
+   - [Get Unread Notifications Count (`GET /api/users/{userId}/notifications/unread-count`)](#get-apiusersuseridnotificationsunread-count)
+   - [Mark Single Notification as Read (`PATCH /api/notifications/{id}/read`)](#patch-apinotificationsidread)
+   - [Mark All Notifications as Read (`PATCH /api/users/{userId}/notifications/read-all`)](#patch-apiusersuseridnotificationsread-all)
+9. [8. Messages & Broadcast System](#8-messages--broadcast-system)
+   - [List User Messages (`GET /api/messages`)](#get-apimessages)
+   - [Get Message by ID & Thread (`GET /api/messages/{id}`)](#get-apimessagesid)
+   - [Create Message or Broadcast (`POST /api/messages`)](#post-apimessages)
+   - [Reply to Message Thread (`POST /api/messages/{id}/replies`)](#post-apimessagesidreplies)
+   - [Mark Message as Read / Unread (`PATCH /api/messages/{id}/read`)](#patch-apimessagesidread)
+   - [Archive / Unarchive Message (`PATCH /api/messages/{id}/archive`)](#patch-apimessagesidarchive)
+   - [Delete Message (`DELETE /api/messages/{id}`)](#delete-apimessagesid)
+   - [Get Unread Messages Count (`GET /api/messages/unread-count`)](#get-apimessagesunread-count-and-get-apiusersuseridmessagesunread-count)
 
 ---
+
 
 ## Data Models & Schemas
 
@@ -50,8 +65,12 @@ Welcome to the **CheckHit API** documentation. This REST API facilitates managin
 - **StudentAssignmentStatus**: `"NOT_STARTED"` | `"DRAFT"` | `"SUBMITTED"` | `"GRADED"` | `"OVERDUE"`
 - **AppealStatus**: `"SUBMITTED"` | `"UNDER_REVIEW"` | `"ACCEPTED"` | `"REJECTED"` | `"CANCELLED"`
 - **EvaluationStatus**: `"PENDING"` | `"PROCESSING"` | `"COMPLETED"` | `"FAILED"`
+- **NotificationCategory**: `"ASSIGNMENT"` | `"GRADE"` | `"APPEAL"` | `"WARNING"` | `"SYSTEM"` | `"INFO"`
+- **MessageTargetType**: `"DIRECT"` | `"BROADCAST"` | `"SYSTEM"`
 
 ### Core Object Schemas
+
+
 
 #### `User`
 | Field | Type | Description |
@@ -79,8 +98,10 @@ Welcome to the **CheckHit API** documentation. This REST API facilitates managin
 | `academicYear` | `integer` | Academic year (e.g., `2026`). |
 | `ltiContextId` | `string \| null` | LMS Context/Course ID. |
 | `lecturers` | `CourseLecturer[]` | List of assigned lecturers with permissions. |
+| `studentsCount` | `integer` | Number of actively enrolled students (`status = ACTIVE`). |
 | `createdAt` | `string (date-time)` | Record creation timestamp. |
 | `updatedAt` | `string (date-time)` | Record update timestamp. |
+
 
 #### `Assignment`
 | Field | Type | Description |
@@ -127,9 +148,68 @@ Represents a student grade appeal:
 | `createdAt` | `string (date-time)` | Timestamp when appeal was created. |
 | `updatedAt` | `string (date-time)` | Timestamp when appeal was last updated. |
 
+#### `Notification`
+Represents a user notification:
+| Field | Type | Description |
+| :--- | :--- | :--- |
+| `id` | `string (uuid)` | Unique notification identifier. |
+| `recipientId` | `string (uuid)` | User ID (`User.id`) of the notification recipient (student or lecturer). |
+| `title` | `string` | Short title / headline of the notification. |
+| `body` | `string` | Detailed notification message content. |
+| `category` | `enum` | `"ASSIGNMENT"`, `"GRADE"`, `"APPEAL"`, `"WARNING"`, `"SYSTEM"`, `"INFO"`. |
+| `isRead` | `boolean` | Read / unread status (`true` if read, `false` otherwise). |
+| `link` | `string \| null` | Optional deep link route in the frontend (e.g., `"/student/assignments/123"`). |
+| `metadata` | `object \| null` | Optional JSON key-value metadata for frontend context. |
+| `readAt` | `string (date-time) \| null` | Timestamp when the notification was marked as read. |
+| `createdAt` | `string (date-time)` | Timestamp when the notification was created. |
+| `updatedAt` | `string (date-time)` | Timestamp when the notification was last updated. |
+
+#### `Message`
+Represents a direct message, course-wide broadcast, or system announcement:
+| Field | Type | Description |
+| :--- | :--- | :--- |
+| `id` | `string (uuid)` | Unique message identifier. |
+| `senderId` | `string (uuid)` | User ID (`User.id`) of the author. |
+| `sender` | `User` | Embedded author profile object. |
+| `targetType` | `enum` | `"DIRECT"`, `"BROADCAST"`, or `"SYSTEM"`. |
+| `courseId` | `string (uuid) \| null` | Course ID if associated with a course. |
+| `courseCode` | `string \| null` | Course code/abbreviation (e.g., `"CS101"`). |
+| `courseName` | `string \| null` | Full course title. |
+| `subject` | `string` | Message headline / subject. |
+| `snippet` | `string` | Generated ~120 character preview excerpt. |
+| `content` | `string` | Full message markdown / text content. |
+| `isPriority` | `boolean` | Flag indicating high-priority / urgent announcement. |
+| `parentMessageId` | `string (uuid) \| null` | ID of parent message if this is a reply in a thread. |
+| `isRead` | `boolean` | Read status for the current querying user. |
+| `readAt` | `string (date-time) \| null` | Timestamp when current user read the message. |
+| `isArchived` | `boolean` | Archive status in the current user's mailbox. |
+| `isSentByMe` | `boolean` | Flag indicating if current user authored the message. |
+| `recipientCount` | `integer` | Total number of recipient deliveries (e.g. students in course). |
+| `readCount` | `integer` | Total number of recipients who have marked as read. |
+| `repliesCount` | `integer` | Count of replies in the conversation thread. |
+| `replies` | `MessageReply[]` | Nested threaded replies (when fetching single message). |
+| `createdAt` | `string (date-time)` | Timestamp when message was created. |
+| `updatedAt` | `string (date-time)` | Timestamp when message was last updated. |
+
+#### `MessageRecipient`
+Represents per-user delivery state for 1:N broadcasts and direct messages:
+| Field | Type | Description |
+| :--- | :--- | :--- |
+| `id` | `string (uuid)` | Unique recipient record ID. |
+| `messageId` | `string (uuid)` | Foreign key referencing parent `Message.id`. |
+| `recipientId` | `string (uuid)` | Foreign key referencing `User.id`. |
+| `isRead` | `boolean` | User-specific read status (`default: false`). |
+| `readAt` | `string (date-time) \| null` | Timestamp when user marked message read. |
+| `isArchived` | `boolean` | User-specific archive folder status (`default: false`). |
+| `isDeleted` | `boolean` | Soft-delete flag for user mailbox (`default: false`). |
+| `createdAt` | `string (date-time)` | Delivery timestamp. |
+| `updatedAt` | `string (date-time)` | State update timestamp. |
+
 ---
 
+
 ## 1. Students
+
 
 ### `POST /api/students`
 Creates a new student account in the platform.
@@ -500,6 +580,7 @@ Retrieves detailed course information by ID, including assigned lecturers and pe
           "assignedAt": "2026-08-02T13:54:23.000Z"
         }
       ],
+      "studentsCount": 6,
       "createdAt": "2026-08-02T13:54:23.000Z",
       "updatedAt": "2026-08-02T13:54:23.000Z"
     }
@@ -525,15 +606,38 @@ Deletes a course and cascades deletion to related entities (assignments, enrollm
 ---
 
 ### `GET /api/lecturers/{lecturerId}/courses`
-Retrieves all courses where the specified lecturer is assigned as an Owner or Editor.
+Retrieves all courses where the specified lecturer is assigned as an Owner or Editor, along with actively enrolled `studentsCount`.
 
 - **Tags**: `Courses`, `Lecturers`
 - **Path Parameters**:
   - `lecturerId` (`uuid`, required): Lecturer's user ID.
 - **Responses**:
   - **`200 OK`**: Array of `Course` objects.
+    ```json
+    [
+      {
+        "id": "ffa88441-f78e-4e44-b110-6ab402f5cc10",
+        "name": "CS101: Introduction to Computer Science",
+        "semester": "Fall",
+        "academicYear": 2026,
+        "ltiContextId": null,
+        "lecturers": [
+          {
+            "courseId": "ffa88441-f78e-4e44-b110-6ab402f5cc10",
+            "lecturerId": "bbb5766e-a71e-42b1-a056-467926e9a722",
+            "permissionLevel": "OWNER",
+            "assignedAt": "2026-08-02T13:54:23.000Z"
+          }
+        ],
+        "studentsCount": 6,
+        "createdAt": "2026-08-02T13:54:23.000Z",
+        "updatedAt": "2026-08-02T13:54:23.000Z"
+      }
+    ]
+    ```
   - **`400 Bad Request`**: Invalid lecturer ID.
   - **`500 Internal Server Error`**: Server error.
+
 
 ---
 
@@ -687,3 +791,342 @@ Generates an auto-submitting HTML form that completes the LTI 1.3 Deep Linking w
   - **`200 OK`** (`text/html`): HTML form with signed JWT payload that submits the deep link response to LMS.
   - **`401 Unauthorized`**: Missing or invalid LTI session.
   - **`500 Internal Server Error`**: Error generating deep link.
+
+---
+
+## 7. Notifications
+
+### `GET /api/users/{userId}/notifications`
+Retrieves all notifications for a given user (student or lecturer), ordered by creation date descending. Supports optional filtering for unread notifications and limiting the number of returned items (useful for navbar dropdown previews).
+
+- **Tags**: `Notifications`
+- **Path Parameters**:
+  - `userId` (`uuid`, required): The user ID (student or lecturer).
+- **Query Parameters**:
+  - `unreadOnly` (`boolean`, optional): When `true`, filters only unread notifications (`isRead === false`).
+  - `limit` (`integer`, optional): Maximum number of records to return (e.g., `?limit=10`).
+- **Responses**:
+  - **`200 OK`**: Array of `Notification` objects.
+  - **`400 Bad Request`**: Invalid user UUID format.
+  - **`404 Not Found`**: User not found.
+  - **`500 Internal Server Error`**: Server error.
+- **Example cURL**:
+  ```bash
+  curl -s "http://localhost:3001/api/users/3a12e3cb-3b43-4461-b514-5404d55e3479/notifications?limit=5"
+  ```
+- **Example Response**:
+  ```json
+  [
+    {
+      "id": "e38a9d12-1f44-42b7-8db1-c52efb932a41",
+      "recipientId": "3a12e3cb-3b43-4461-b514-5404d55e3479",
+      "title": "New Grade Entered",
+      "body": "Your grade for Midterm Exam: Sorting & Complexity Analysis in CS201 has been entered (88/100).",
+      "category": "GRADE",
+      "isRead": false,
+      "link": "/student/assignments/ab677558-ac66-4af5-9d5e-700a1e941c14",
+      "metadata": {
+        "assignmentId": "ab677558-ac66-4af5-9d5e-700a1e941c14",
+        "score": 88,
+        "maxScore": 100
+      },
+      "readAt": null,
+      "createdAt": "2026-08-03T16:50:00.000Z",
+      "updatedAt": "2026-08-03T16:50:00.000Z"
+    }
+  ]
+  ```
+
+---
+
+### `GET /api/users/{userId}/notifications/unread-count`
+Retrieves the total count of unread notifications for a user. Ideal for displaying notification badge badges in top navigation bars.
+
+- **Tags**: `Notifications`
+- **Path Parameters**:
+  - `userId` (`uuid`, required): The user ID.
+- **Responses**:
+  - **`200 OK`**: `{ "unreadCount": number }`
+  - **`400 Bad Request`**: Invalid user UUID format.
+  - **`404 Not Found`**: User not found.
+  - **`500 Internal Server Error`**: Server error.
+- **Example Response**:
+  ```json
+  {
+    "unreadCount": 3
+  }
+  ```
+
+---
+
+### `PATCH /api/notifications/{id}/read`
+Marks a single notification as read, updating `isRead` to `true` and stamping `readAt` with the current timestamp.
+
+- **Tags**: `Notifications`
+- **Path Parameters**:
+  - `id` (`uuid`, required): The notification ID.
+- **Responses**:
+  - **`200 OK`**: The updated `Notification` object.
+  - **`400 Bad Request`**: Invalid notification UUID format.
+  - **`404 Not Found`**: Notification not found.
+  - **`500 Internal Server Error`**: Server error.
+
+---
+
+### `PATCH /api/users/{userId}/notifications/read-all`
+Marks all unread notifications for a user as read in bulk.
+
+- **Tags**: `Notifications`
+- **Path Parameters**:
+  - `userId` (`uuid`, required): The user ID.
+- **Responses**:
+  - **`200 OK`**: `{ "success": true, "updatedCount": number }`
+  - **`400 Bad Request`**: Invalid user UUID format.
+  - **`404 Not Found`**: User not found.
+  - **`500 Internal Server Error`**: Server error.
+- **Example Response**:
+  ```json
+  {
+    "success": true,
+    "updatedCount": 3
+  }
+  ```
+
+---
+
+## 8. Messages & Broadcast System
+
+### `GET /api/messages`
+Retrieves a paginated list of direct messages, course broadcasts, and system announcements for a user, segmented into folders (`inbox`, `sent`, `archive`).
+
+- **Tags**: `Messages`
+- **Query Parameters**:
+  - `userId` (`uuid`, optional if provided via header): User ID.
+  - `folder` (`string`, optional, default `inbox`): One of `inbox`, `sent`, `archive`.
+  - `targetType` (`string`, optional, default `ALL`): Filter by `DIRECT`, `BROADCAST`, `SYSTEM`, or `ALL`.
+  - `courseId` (`uuid`, optional): Filter messages associated with a specific course.
+  - `search` (`string`, optional): Search term matching subject, content, sender name, or course name.
+  - `page` (`integer`, optional, default `1`): Page number.
+  - `limit` (`integer`, optional, default `20`): Page size.
+- **Headers**:
+  - `x-user-id` (`uuid`, optional): User ID header alternative.
+- **Responses**:
+  - **`200 OK`**: Paginated messages list.
+    ```json
+    {
+      "messages": [
+        {
+          "id": "c1a2b3c4-d5e6-7f8a-9b0c-1d2e3f4a5b6c",
+          "senderId": "5a205d7f-7084-4f91-ba7c-aeb0b6078256",
+          "sender": {
+            "id": "5a205d7f-7084-4f91-ba7c-aeb0b6078256",
+            "name": "Dr. Sarah Jenkins",
+            "email": "sarah.jenkins@university.edu",
+            "role": "LECTURER"
+          },
+          "targetType": "BROADCAST",
+          "courseId": "ffa88441-f78e-4e44-b110-6ab402f5cc10",
+          "courseCode": "CS101",
+          "courseName": "CS101: Introduction to Computer Science",
+          "subject": "Midterm Review Session Scheduled",
+          "snippet": "Hello everyone, please note that we will hold an extra review session this Thursday...",
+          "content": "Hello everyone, please note that we will hold an extra review session this Thursday at 4 PM in Hall B.",
+          "isPriority": true,
+          "isRead": false,
+          "readAt": null,
+          "isArchived": false,
+          "isSentByMe": false,
+          "recipientCount": 24,
+          "readCount": 18,
+          "repliesCount": 3,
+          "createdAt": "2026-08-04T10:00:00.000Z",
+          "updatedAt": "2026-08-04T10:00:00.000Z"
+        }
+      ],
+      "total": 1,
+      "unreadCount": 1,
+      "page": 1,
+      "limit": 20
+    }
+    ```
+  - **`400 Bad Request`**: Missing or invalid user ID.
+  - **`404 Not Found`**: User not found.
+  - **`500 Internal Server Error`**: Server error.
+
+---
+
+### `GET /api/messages/{id}`
+Retrieves a single message along with its full chronological threaded replies and delivery statistics.
+
+- **Tags**: `Messages`
+- **Path Parameters**:
+  - `id` (`uuid`, required): Message ID.
+- **Query Parameters / Headers**:
+  - `userId` / `x-user-id` (`uuid`, optional): Current user ID for personalization (`isMe`, `isSentByMe`, `isRead`).
+- **Responses**:
+  - **`200 OK`**: Message object with nested `replies`.
+    ```json
+    {
+      "id": "c1a2b3c4-d5e6-7f8a-9b0c-1d2e3f4a5b6c",
+      "senderId": "5a205d7f-7084-4f91-ba7c-aeb0b6078256",
+      "sender": {
+        "id": "5a205d7f-7084-4f91-ba7c-aeb0b6078256",
+        "name": "Dr. Sarah Jenkins",
+        "email": "sarah.jenkins@university.edu",
+        "role": "LECTURER"
+      },
+      "targetType": "BROADCAST",
+      "courseId": "ffa88441-f78e-4e44-b110-6ab402f5cc10",
+      "courseCode": "CS101",
+      "courseName": "CS101: Introduction to Computer Science",
+      "subject": "Midterm Review Session Scheduled",
+      "snippet": "Hello everyone, please note that we will hold an extra review session...",
+      "content": "Hello everyone, please note that we will hold an extra review session this Thursday at 4 PM in Hall B.",
+      "isPriority": true,
+      "isRead": true,
+      "readAt": "2026-08-04T10:15:00.000Z",
+      "isArchived": false,
+      "isSentByMe": false,
+      "recipientCount": 24,
+      "readCount": 18,
+      "repliesCount": 1,
+      "createdAt": "2026-08-04T10:00:00.000Z",
+      "updatedAt": "2026-08-04T10:00:00.000Z",
+      "replies": [
+        {
+          "id": "d2e3f4a5-b6c7-8a9b-0c1d-2e3f4a5b6c7d",
+          "messageId": "c1a2b3c4-d5e6-7f8a-9b0c-1d2e3f4a5b6c",
+          "senderId": "3a12e3cb-3b43-4461-b514-5404d55e3479",
+          "sender": {
+            "id": "3a12e3cb-3b43-4461-b514-5404d55e3479",
+            "name": "John Doe",
+            "email": "john.doe@student.university.edu",
+            "role": "STUDENT"
+          },
+          "content": "Will the slides be recorded and uploaded afterwards?",
+          "isMe": true,
+          "createdAt": "2026-08-04T10:20:00.000Z"
+        }
+      ]
+    }
+    ```
+  - **`400 Bad Request`**: Invalid message UUID format.
+  - **`404 Not Found`**: Message not found.
+  - **`500 Internal Server Error`**: Server error.
+
+---
+
+### `POST /api/messages`
+Creates and dispatches a new direct message or course-wide announcement.
+
+- **Tags**: `Messages`
+- **Request Body**:
+  ```json
+  {
+    "senderId": "5a205d7f-7084-4f91-ba7c-aeb0b6078256",
+    "targetType": "BROADCAST",
+    "courseId": "ffa88441-f78e-4e44-b110-6ab402f5cc10",
+    "recipientId": "3a12e3cb-3b43-4461-b514-5404d55e3479",
+    "subject": "Assignment 2 Clarification",
+    "content": "Please review the updated submission guidelines regarding unit tests.",
+    "isPriority": true
+  }
+  ```
+- **Responses**:
+  - **`201 Created`**: Message created.
+  - **`400 Bad Request`**: Validation error (missing required fields, missing recipient for direct message, missing course for broadcast).
+  - **`404 Not Found`**: Sender, recipient, or course not found.
+  - **`500 Internal Server Error`**: Server error.
+
+---
+
+### `POST /api/messages/{id}/replies`
+Appends a reply to an existing message thread.
+
+- **Tags**: `Messages`
+- **Path Parameters**:
+  - `id` (`uuid`, required): Parent Message ID.
+- **Request Body**:
+  ```json
+  {
+    "senderId": "3a12e3cb-3b43-4461-b514-5404d55e3479",
+    "content": "Thank you for the update!"
+  }
+  ```
+- **Responses**:
+  - **`201 Created`**: Returns created `MessageReply`.
+  - **`400 Bad Request`**: Invalid input.
+  - **`404 Not Found`**: Parent message or sender not found.
+  - **`500 Internal Server Error`**: Server error.
+
+---
+
+### `PATCH /api/messages/{id}/read`
+Updates read status for the calling user.
+
+- **Tags**: `Messages`
+- **Path Parameters**:
+  - `id` (`uuid`, required): Message ID.
+- **Request Body**:
+  ```json
+  {
+    "userId": "3a12e3cb-3b43-4461-b514-5404d55e3479",
+    "isRead": true
+  }
+  ```
+- **Responses**:
+  - **`200 OK`**: `{ "success": true, "messageId": "...", "isRead": true, "readAt": "..." }`
+  - **`400 Bad Request`**: Invalid ID or missing user ID.
+  - **`404 Not Found`**: Message or recipient entry not found.
+  - **`500 Internal Server Error`**: Server error.
+
+---
+
+### `PATCH /api/messages/{id}/archive`
+Archives or unarchives a message in the user's view.
+
+- **Tags**: `Messages`
+- **Path Parameters**:
+  - `id` (`uuid`, required): Message ID.
+- **Request Body**:
+  ```json
+  {
+    "userId": "3a12e3cb-3b43-4461-b514-5404d55e3479",
+    "isArchived": true
+  }
+  ```
+- **Responses**:
+  - **`200 OK`**: `{ "success": true, "messageId": "...", "isArchived": true }`
+  - **`400 Bad Request`**: Invalid ID or missing user ID.
+  - **`404 Not Found`**: Message or recipient entry not found.
+  - **`500 Internal Server Error`**: Server error.
+
+---
+
+### `DELETE /api/messages/{id}`
+Soft-deletes a message from the user's inbox or sent folder.
+
+- **Tags**: `Messages`
+- **Path Parameters**:
+  - `id` (`uuid`, required): Message ID.
+- **Query Parameters / Headers / Body**:
+  - `userId` (`uuid`): User ID.
+- **Responses**:
+  - **`200 OK`**: `{ "success": true, "message": "Message removed from inbox" }`
+  - **`400 Bad Request`**: Missing user ID.
+  - **`404 Not Found`**: Message not found.
+  - **`500 Internal Server Error`**: Server error.
+
+---
+
+### `GET /api/messages/unread-count` and `GET /api/users/{userId}/messages/unread-count`
+Fast unread messages count for navbar notification badges.
+
+- **Tags**: `Messages`
+- **Parameters**: `userId` via path or query or `x-user-id` header.
+- **Responses**:
+  - **`200 OK`**: `{ "unreadCount": 3 }`
+  - **`400 Bad Request`**: Missing user ID.
+  - **`500 Internal Server Error`**: Server error.
+
+

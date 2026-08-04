@@ -7,7 +7,10 @@ import { appealRouter } from "./routes/appeal.routes.js";
 import { assignmentRouter } from "./routes/assignment.routes.js";
 import { login } from "./routes/auth.js";
 import { courseRouter } from "./routes/course.routes.js";
+import { messageRouter } from "./routes/message.routes.js";
+import { notificationRouter } from "./routes/notification.routes.js";
 import { userRouter } from "./routes/user.routes.js";
+
 
 dotenv.config();
 
@@ -85,7 +88,10 @@ export const boostrapLti = async (db: Database): Promise<void> => {
   lti.app.use("/api", appealRouter);
   lti.app.use("/api", assignmentRouter);
   lti.app.use("/api", courseRouter);
+  lti.app.use("/api", messageRouter);
+  lti.app.use("/api", notificationRouter);
   lti.app.use("/api", userRouter);
+
 
   /**
    * @openapi
