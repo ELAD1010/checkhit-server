@@ -43,6 +43,7 @@ export class AssignmentRepository {
         description: input.description,
         type: input.type,
         evaluationInstructions: input.evaluationInstructions,
+        questionSelectionInstructions: null,
         maxScore: input.maxScore,
         startAt: input.startAt ?? null,
         dueAt: input.dueAt ?? null,
