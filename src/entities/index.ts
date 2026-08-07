@@ -11,6 +11,9 @@ import { EvaluationAudit } from "./evaluation-audit.js";
 import { EvaluationQuestionResult } from "./evaluation-question-result.js";
 import { FileAsset } from "./file-asset.js";
 import { Lecturer } from "./lecturer.js";
+import { Message } from "./message.js";
+import { MessageRecipient } from "./message-recipient.js";
+import { Notification } from "./notification.js";
 import { LtiCourseContext } from "./lti-course-context.js";
 import { LtiPlatform } from "./lti-platform.js";
 import { LtiResourceLink } from "./lti-resource-link.js";
@@ -36,6 +39,9 @@ export { EvaluationAudit } from "./evaluation-audit.js";
 export { EvaluationQuestionResult } from "./evaluation-question-result.js";
 export { FileAsset } from "./file-asset.js";
 export { Lecturer } from "./lecturer.js";
+export { Message } from "./message.js";
+export { MessageRecipient } from "./message-recipient.js";
+export { Notification } from "./notification.js";
 export { LtiCourseContext } from "./lti-course-context.js";
 export { LtiPlatform } from "./lti-platform.js";
 export { LtiResourceLink } from "./lti-resource-link.js";
@@ -63,6 +69,9 @@ export const DOMAIN_ENTITIES = [
   EvaluationQuestionResult,
   EvaluationAudit,
   Appeal,
+  Notification,
+  Message,
+  MessageRecipient,
   FileAsset,
   ResourceFile,
   SubmissionFile,
@@ -72,3 +81,5 @@ export const DOMAIN_ENTITIES = [
   LtiCourseContext,
   LtiResourceLink,
 ];
+
+

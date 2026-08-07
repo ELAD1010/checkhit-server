@@ -2,8 +2,11 @@ import { Request, Response } from "express";
 import { AssignmentStatus } from "../entities/enums.js";
 import {
   AssignmentCourseNotFoundError,
+  AssignmentNotFoundError,
   AssignmentRepository,
+  AssignmentStudentNotFoundError,
   CreateAssignmentInput,
+  StudentNotEnrolledInCourseError,
 } from "../repositories/assignment.repository.js";
 import { getDatabaseErrorCode, isUuid } from "./user-controller.utils.js";
 
@@ -140,7 +143,36 @@ export const getAssignmentById = async (
     return;
   }
 
+  const studentId =
+    typeof req.query.studentId === "string" && req.query.studentId.trim() !== ""
+      ? req.query.studentId.trim()
+      : typeof req.params.studentId === "string" &&
+          req.params.studentId.trim() !== ""
+        ? req.params.studentId.trim()
+        : (res.locals?.token?.user as string | undefined);
+
+  if (studentId && !isUuid(studentId)) {
+    res.status(400).json({ message: "A valid student ID is required" });
+    return;
+  }
+
   try {
+    if (studentId) {
+      const studentAssignment =
+        await assignmentRepository.findStudentAssignmentDetail(
+          assignmentId,
+          studentId,
+        );
+
+      if (!studentAssignment) {
+        res.status(404).json({ message: "Assignment not found" });
+        return;
+      }
+
+      res.json(studentAssignment);
+      return;
+    }
+
     const assignment =
       await assignmentRepository.findAssignmentById(assignmentId);
 
@@ -151,10 +183,17 @@ export const getAssignmentById = async (
 
     res.json(assignment);
   } catch (error) {
+    if (error instanceof AssignmentStudentNotFoundError) {
+      res.status(404).json({ message: error.message });
+      return;
+    }
+
     console.error("Failed to fetch assignment:", error);
     res.status(500).json({ message: "Failed to fetch assignment" });
   }
 };
+
+export const getStudentAssignmentDetail = getAssignmentById;
 
 export const getCourseAssignments = async (
   req: Request,
@@ -180,6 +219,133 @@ export const getCourseAssignments = async (
 
     console.error("Failed to fetch course assignments:", error);
     res.status(500).json({ message: "Failed to fetch course assignments" });
+  }
+};
+
+export const getStudentCourseAssignments = async (
+  req: Request,
+  res: Response,
+): Promise<void> => {
+  const studentId =
+    typeof req.params.studentId === "string" ? req.params.studentId : undefined;
+  const courseId =
+    typeof req.params.courseId === "string" ? req.params.courseId : undefined;
+
+  if (!studentId || !isUuid(studentId)) {
+    res.status(400).json({ message: "A valid student ID is required" });
+    return;
+  }
+
+  if (!courseId || !isUuid(courseId)) {
+    res.status(400).json({ message: "A valid course ID is required" });
+    return;
+  }
+
+  try {
+    const assignments =
+      await assignmentRepository.findStudentAssignmentsWithStatus(
+        studentId,
+        courseId,
+      );
+    res.json(assignments);
+  } catch (error) {
+    if (error instanceof AssignmentStudentNotFoundError) {
+      res.status(404).json({ message: error.message });
+      return;
+    }
+
+    if (error instanceof AssignmentCourseNotFoundError) {
+      res.status(404).json({ message: error.message });
+      return;
+    }
+
+    if (error instanceof StudentNotEnrolledInCourseError) {
+      res.status(404).json({ message: error.message });
+      return;
+    }
+
+    console.error("Failed to fetch student course assignments:", error);
+    res
+      .status(500)
+      .json({ message: "Failed to fetch student course assignments" });
+  }
+};
+
+export const getAllStudentAssignments = async (
+  req: Request,
+  res: Response,
+): Promise<void> => {
+  const studentId =
+    typeof req.params.studentId === "string" ? req.params.studentId : undefined;
+
+  if (!studentId || !isUuid(studentId)) {
+    res.status(400).json({ message: "A valid student ID is required" });
+    return;
+  }
+
+  const limit = req.query.limit
+    ? parseInt(req.query.limit as string, 10)
+    : undefined;
+  const status =
+    typeof req.query.status === "string" ? req.query.status : undefined;
+  const upcoming =
+    req.query.upcoming === "true" || req.query.upcoming === "1";
+  const sort =
+    typeof req.query.sort === "string" ? req.query.sort : undefined;
+
+  try {
+    const assignments =
+      await assignmentRepository.findAllStudentAssignmentsWithStatus(
+        studentId,
+        {
+          limit: limit && !isNaN(limit) ? limit : undefined,
+          status,
+          upcoming,
+          sort,
+        },
+      );
+    res.json(assignments);
+  } catch (error) {
+    if (error instanceof AssignmentStudentNotFoundError) {
+      res.status(404).json({ message: error.message });
+      return;
+    }
+
+    console.error("Failed to fetch student assignments:", error);
+    res.status(500).json({ message: "Failed to fetch student assignments" });
+  }
+};
+
+export const getStudentRecentGrades = async (
+  req: Request,
+  res: Response,
+): Promise<void> => {
+  const studentId =
+    typeof req.params.studentId === "string" ? req.params.studentId : undefined;
+
+  if (!studentId || !isUuid(studentId)) {
+    res.status(400).json({ message: "A valid student ID is required" });
+    return;
+  }
+
+  const limit = req.query.limit
+    ? parseInt(req.query.limit as string, 10)
+    : 5;
+
+  try {
+    const grades = await assignmentRepository.findStudentRecentGrades(
+      studentId,
+      !isNaN(limit) && limit > 0 ? limit : 5,
+    );
+    res.json(grades);
+  } catch (error) {
+    if (error instanceof AssignmentStudentNotFoundError) {
+      res.status(404).json({ message: error.message });
+      return;
+    }
+
+    console.error("Failed to fetch student recent grades:", error);
+    res.status(500).json({ message: "Failed to fetch student recent grades" });
   }
 };
 
@@ -209,5 +375,43 @@ export const deleteAssignment = async (
   } catch (error) {
     console.error("Failed to delete assignment:", error);
     res.status(500).json({ message: "Failed to delete assignment" });
+  }
+};
+
+export const getLecturerAssignmentOverview = async (
+  req: Request,
+  res: Response,
+): Promise<void> => {
+  const assignmentId =
+    typeof req.params.assignmentId === "string"
+      ? req.params.assignmentId
+      : undefined;
+
+  if (!assignmentId || !isUuid(assignmentId)) {
+    res.status(400).json({ message: "A valid assignment ID is required" });
+    return;
+  }
+
+  const search =
+    typeof req.query.search === "string" ? req.query.search : undefined;
+  const status =
+    typeof req.query.status === "string" ? req.query.status : undefined;
+
+  try {
+    const overview = await assignmentRepository.findLecturerAssignmentOverview(
+      assignmentId,
+      { search, status },
+    );
+    res.json(overview);
+  } catch (error) {
+    if (error instanceof AssignmentNotFoundError) {
+      res.status(404).json({ message: error.message });
+      return;
+    }
+
+    console.error("Failed to fetch lecturer assignment overview:", error);
+    res
+      .status(500)
+      .json({ message: "Failed to fetch lecturer assignment overview" });
   }
 };
