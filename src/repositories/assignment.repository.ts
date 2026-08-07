@@ -116,7 +116,10 @@ export class AssignmentStudentNotFoundError extends Error {
 }
 
 export class StudentNotEnrolledInCourseError extends Error {
-  constructor(readonly studentId: string, readonly courseId: string) {
+  constructor(
+    readonly studentId: string,
+    readonly courseId: string,
+  ) {
     super(`Student ${studentId} is not enrolled in course ${courseId}`);
     this.name = "StudentNotEnrolledInCourseError";
   }
@@ -520,14 +523,12 @@ export class AssignmentRepository {
       throw new AssignmentStudentNotFoundError(studentId);
     }
 
-    const enrollments = await this.dataSource
-      .getRepository(Enrollment)
-      .find({
-        where: {
-          studentId,
-          status: MembershipStatus.ACTIVE,
-        },
-      });
+    const enrollments = await this.dataSource.getRepository(Enrollment).find({
+      where: {
+        studentId,
+        status: MembershipStatus.ACTIVE,
+      },
+    });
 
     if (enrollments.length === 0) {
       return [];
