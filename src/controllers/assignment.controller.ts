@@ -47,8 +47,6 @@ const parseCreateAssignmentInput = (
     startAt,
     dueAt,
     status,
-    ltiResourceLinkId,
-    ltiLineItemUrl,
   } = body as Record<string, unknown>;
   const parsedStartAt = parseOptionalDate(startAt);
   const parsedDueAt = parseOptionalDate(dueAt);
@@ -70,12 +68,6 @@ const parseCreateAssignmentInput = (
         !Object.values(AssignmentStatus).includes(
           status as AssignmentStatus,
         ))) ||
-    (ltiResourceLinkId !== undefined &&
-      ltiResourceLinkId !== null &&
-      typeof ltiResourceLinkId !== "string") ||
-    (ltiLineItemUrl !== undefined &&
-      ltiLineItemUrl !== null &&
-      typeof ltiLineItemUrl !== "string") ||
     (parsedStartAt.value &&
       parsedDueAt.value &&
       parsedDueAt.value <= parsedStartAt.value)
@@ -93,12 +85,6 @@ const parseCreateAssignmentInput = (
     startAt: parsedStartAt.value,
     dueAt: parsedDueAt.value,
     status: status as AssignmentStatus | undefined,
-    ltiResourceLinkId:
-      typeof ltiResourceLinkId === "string"
-        ? ltiResourceLinkId.trim() || null
-        : null,
-    ltiLineItemUrl:
-      typeof ltiLineItemUrl === "string" ? ltiLineItemUrl.trim() || null : null,
   };
 };
 

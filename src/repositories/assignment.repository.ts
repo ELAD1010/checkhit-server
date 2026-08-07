@@ -24,8 +24,6 @@ export type CreateAssignmentInput = {
   startAt?: Date | null;
   dueAt?: Date | null;
   status?: AssignmentStatus;
-  ltiResourceLinkId?: string | null;
-  ltiLineItemUrl?: string | null;
 };
 
 export type StudentAssignmentStatus =
@@ -238,8 +236,8 @@ export class AssignmentRepository {
         startAt: input.startAt ?? null,
         dueAt: input.dueAt ?? null,
         status: input.status ?? AssignmentStatus.DRAFT,
-        ltiResourceLinkId: input.ltiResourceLinkId ?? null,
-        ltiLineItemUrl: input.ltiLineItemUrl ?? null,
+        ltiResourceLinkId: null,
+        ltiLineItemUrl: null,
       }),
     );
   }

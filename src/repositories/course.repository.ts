@@ -18,7 +18,6 @@ export type CreateCourseInput = {
   semester: string;
   academicYear: number;
   lecturerIds: string[];
-  ltiContextId?: string | null;
 };
 
 export interface StudentCoursesQueryOptions {
@@ -47,7 +46,7 @@ export class CourseRepository {
           name: input.name,
           semester: input.semester,
           academicYear: input.academicYear,
-          ltiContextId: input.ltiContextId ?? null,
+          ltiContextId: null,
         }),
       );
 
