@@ -8,7 +8,6 @@ import { User } from "../entities/user.js";
 export type CreateUserInput = {
   name: string;
   email: string;
-  ltiSubject?: string | null;
 };
 
 export class UserRepository {
@@ -93,7 +92,7 @@ export class UserRepository {
     const user = userRepository.create({
       name: input.name,
       email: input.email,
-      ltiSubject: input.ltiSubject ?? null,
+      ltiSubject: null,
       role,
     });
 

@@ -25,8 +25,8 @@ export class User {
   name!: string;
 
   @Index({ unique: true })
-  @Column({ type: "varchar", length: 320 })
-  email!: string;
+  @Column({ type: "varchar", length: 320, nullable: true })
+  email!: string | null;
 
   @Column({ type: "enum", enum: UserRole, enumName: "user_role" })
   role!: UserRole;
