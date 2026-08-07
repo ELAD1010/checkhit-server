@@ -1,10 +1,14 @@
 import { Appeal } from "./appeal.js";
 import { AppealFile } from "./appeal-file.js";
 import { Assignment } from "./assignment.js";
+import { AssignmentQuestion } from "./assignment-question.js";
+import { AssignmentQuestionImport } from "./assignment-question-import.js";
 import { Course } from "./course.js";
 import { CourseLecturer } from "./course-lecturer.js";
 import { Enrollment } from "./enrollment.js";
 import { Evaluation } from "./evaluation.js";
+import { EvaluationAudit } from "./evaluation-audit.js";
+import { EvaluationQuestionResult } from "./evaluation-question-result.js";
 import { FileAsset } from "./file-asset.js";
 import { Lecturer } from "./lecturer.js";
 import { LtiCourseContext } from "./lti-course-context.js";
@@ -21,11 +25,15 @@ import { User } from "./user.js";
 export { Appeal } from "./appeal.js";
 export { AppealFile } from "./appeal-file.js";
 export { Assignment } from "./assignment.js";
+export { AssignmentQuestion } from "./assignment-question.js";
+export { AssignmentQuestionImport } from "./assignment-question-import.js";
 export { Course } from "./course.js";
 export { CourseLecturer } from "./course-lecturer.js";
 export { Enrollment } from "./enrollment.js";
 export * from "./enums.js";
 export { Evaluation } from "./evaluation.js";
+export { EvaluationAudit } from "./evaluation-audit.js";
+export { EvaluationQuestionResult } from "./evaluation-question-result.js";
 export { FileAsset } from "./file-asset.js";
 export { Lecturer } from "./lecturer.js";
 export { LtiCourseContext } from "./lti-course-context.js";
@@ -48,8 +56,12 @@ export const DOMAIN_ENTITIES = [
   Enrollment,
   Resource,
   Assignment,
+  AssignmentQuestion,
+  AssignmentQuestionImport,
   Submission,
   Evaluation,
+  EvaluationQuestionResult,
+  EvaluationAudit,
   Appeal,
   FileAsset,
   ResourceFile,
