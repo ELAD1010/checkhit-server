@@ -155,7 +155,7 @@ export type LecturerAssignmentEvaluationInfo = {
   percentage: number;
   isFinal: boolean;
   feedback?: string | null;
-  evaluatedAt: Date;
+  evaluatedAt: Date | null;
 };
 
 export type LecturerAssignmentAppealInfo = {
@@ -310,7 +310,7 @@ export class AssignmentRepository {
           feedback: finalEval.feedback,
           status: finalEval.status,
           isFinal: finalEval.isFinal,
-          evaluatedAt: finalEval.createdAt,
+          evaluatedAt: finalEval.completedAt,
         };
       }
 
@@ -866,7 +866,7 @@ export class AssignmentRepository {
               percentage: pct,
               isFinal: finalEval.isFinal,
               feedback: finalEval.feedback,
-              evaluatedAt: finalEval.createdAt,
+              evaluatedAt: finalEval.completedAt,
             };
           }
 
