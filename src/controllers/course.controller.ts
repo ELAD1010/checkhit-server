@@ -140,12 +140,49 @@ export const getStudentCourses = async (
     return;
   }
 
+  const limit = req.query.limit
+    ? parseInt(req.query.limit as string, 10)
+    : undefined;
+  const sortBy =
+    typeof req.query.sortBy === "string" ? req.query.sortBy : undefined;
+
   try {
-    const courses = await courseRepository.findCoursesByStudentId(studentId);
+    const courses = await courseRepository.findCoursesByStudentId(studentId, {
+      limit: limit && !isNaN(limit) ? limit : undefined,
+      sortBy,
+    });
     res.json(courses);
   } catch (error) {
     console.error("Failed to fetch student courses:", error);
     res.status(500).json({ message: "Failed to fetch student courses" });
+  }
+};
+
+export const getStudentUrgentCourses = async (
+  req: Request,
+  res: Response,
+): Promise<void> => {
+  const studentId =
+    typeof req.params.studentId === "string" ? req.params.studentId : undefined;
+
+  if (!studentId || !isUuid(studentId)) {
+    res.status(400).json({ message: "A valid student ID is required" });
+    return;
+  }
+
+  const limit = req.query.limit
+    ? parseInt(req.query.limit as string, 10)
+    : undefined;
+
+  try {
+    const courses = await courseRepository.findUrgentCoursesByStudentId(
+      studentId,
+      limit && !isNaN(limit) ? limit : undefined,
+    );
+    res.json(courses);
+  } catch (error) {
+    console.error("Failed to fetch urgent student courses:", error);
+    res.status(500).json({ message: "Failed to fetch urgent student courses" });
   }
 };
 

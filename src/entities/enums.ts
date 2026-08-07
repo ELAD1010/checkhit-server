@@ -39,3 +39,19 @@ export enum AppealStatus {
   REJECTED = "REJECTED",
   CANCELLED = "CANCELLED",
 }
+
+export enum NotificationCategory {
+  ASSIGNMENT = "ASSIGNMENT",
+  GRADE = "GRADE",
+  APPEAL = "APPEAL",
+  WARNING = "WARNING",
+  SYSTEM = "SYSTEM",
+  INFO = "INFO",
+}
+
+export enum MessageTargetType {
+  DIRECT = "DIRECT",
+  BROADCAST = "BROADCAST",
+  SYSTEM = "SYSTEM",
+}
+

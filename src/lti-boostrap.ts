@@ -4,17 +4,21 @@ import express from "express";
 import { Request, Response } from "express";
 import { LtiToken } from "./common/types/lti.js";
 import { setupSwagger } from "./docs/swagger.js";
+import { appealRouter } from "./routes/appeal.routes.js";
 import { UserRole } from "./entities/enums.js";
 import { AssignmentRepository } from "./repositories/assignment.repository.js";
 import { assignmentRouter } from "./routes/assignment.routes.js";
 import { login } from "./routes/auth.js";
 import { courseRouter } from "./routes/course.routes.js";
+import { messageRouter } from "./routes/message.routes.js";
+import { notificationRouter } from "./routes/notification.routes.js";
 import { userRouter } from "./routes/user.routes.js";
 import {
   LtiLaunchDataError,
   LtiLaunchSyncService,
   LtiRoleConflictError,
 } from "./services/lti-launch-sync.service.js";
+
 
 dotenv.config();
 
@@ -96,6 +100,7 @@ export const boostrapLti = async (db: Database): Promise<void> => {
   );
 
   lti.whitelist(
+    { route: new RegExp(/^\/api\/.*/), method: "ALL" },
     "/api-docs",
     "/api-docs/",
     "/api-docs.json",
@@ -119,9 +124,13 @@ export const boostrapLti = async (db: Database): Promise<void> => {
 
   lti.app.use(express.json());
   setupSwagger(lti.app);
+  lti.app.use("/api", appealRouter);
   lti.app.use("/api", assignmentRouter);
   lti.app.use("/api", courseRouter);
+  lti.app.use("/api", messageRouter);
+  lti.app.use("/api", notificationRouter);
   lti.app.use("/api", userRouter);
+
 
   /**
    * @openapi

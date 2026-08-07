@@ -3,12 +3,16 @@ import {
   CreateDateColumn,
   Entity,
   Index,
+  OneToMany,
   OneToOne,
   PrimaryGeneratedColumn,
   Relation,
   UpdateDateColumn,
 } from "typeorm";
 import { Lecturer } from "./lecturer.js";
+import { Message } from "./message.js";
+import { MessageRecipient } from "./message-recipient.js";
+import { Notification } from "./notification.js";
 import { Student } from "./student.js";
 import { UserRole } from "./enums.js";
 
@@ -36,9 +40,19 @@ export class User {
   @OneToOne(() => Lecturer, (lecturer) => lecturer.user)
   lecturer!: Relation<Lecturer> | null;
 
+  @OneToMany(() => Notification, (notification) => notification.recipient)
+  notifications!: Relation<Notification>[];
+
+  @OneToMany(() => Message, (message) => message.sender)
+  sentMessages!: Relation<Message>[];
+
+  @OneToMany(() => MessageRecipient, (recipient) => recipient.recipient)
+  receivedMessages!: Relation<MessageRecipient>[];
+
   @CreateDateColumn({ name: "created_at", type: "timestamptz" })
   createdAt!: Date;
 
   @UpdateDateColumn({ name: "updated_at", type: "timestamptz" })
   updatedAt!: Date;
 }
+

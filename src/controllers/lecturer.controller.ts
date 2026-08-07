@@ -1,4 +1,8 @@
 import { Request, Response } from "express";
+import {
+  DashboardRepository,
+  LecturerNotFoundError,
+} from "../repositories/dashboard.repository.js";
 import { UserRepository } from "../repositories/user.repository.js";
 import {
   getDatabaseErrorCode,
@@ -7,6 +11,7 @@ import {
 } from "./user-controller.utils.js";
 
 const userRepository = new UserRepository();
+const dashboardRepository = new DashboardRepository();
 
 export const createLecturer = async (
   req: Request,
@@ -65,3 +70,33 @@ export const getLecturerById = async (
     res.status(500).json({ message: "Failed to fetch lecturer" });
   }
 };
+
+export const getLecturerDashboard = async (
+  req: Request,
+  res: Response,
+): Promise<void> => {
+  const lecturerId =
+    typeof req.params.lecturerId === "string"
+      ? req.params.lecturerId
+      : undefined;
+
+  if (!lecturerId || !isUuid(lecturerId)) {
+    res.status(400).json({ message: "A valid lecturer ID is required" });
+    return;
+  }
+
+  try {
+    const dashboardData =
+      await dashboardRepository.getLecturerDashboard(lecturerId);
+    res.json(dashboardData);
+  } catch (error) {
+    if (error instanceof LecturerNotFoundError) {
+      res.status(404).json({ message: error.message });
+      return;
+    }
+
+    console.error("Failed to fetch lecturer dashboard:", error);
+    res.status(500).json({ message: "Failed to fetch lecturer dashboard" });
+  }
+};
+
