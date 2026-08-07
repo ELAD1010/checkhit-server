@@ -8,13 +8,6 @@ export const openApiComponents = {
     },
   },
   schemas: {
-    Error: {
-      type: "object",
-      required: ["message"],
-      properties: {
-        message: { type: "string" },
-      },
-    },
     ErrorResponse: {
       type: "object",
       required: ["message"],
@@ -281,170 +274,170 @@ export const openApiComponents = {
         id: { type: "string", format: "uuid" },
         submissionId: { type: "string", format: "uuid" },
         questionSetId: { type: "string", format: "uuid" },
-        StudentAssignmentEvaluation: {
+        status: {
+          type: "string",
+          enum: ["PENDING", "PROCESSING", "COMPLETED", "FAILED"],
+        },
+        score: { type: ["number", "null"] },
+        maxScore: { type: "number" },
+        feedback: { type: ["string", "null"] },
+        selectionSummary: { type: ["string", "null"] },
+        confidence: { type: ["number", "null"] },
+        model: { type: "string" },
+        promptVersion: { type: "string" },
+        isFinal: { type: "boolean" },
+        errorMessage: { type: ["string", "null"] },
+        attemptCount: { type: "integer", minimum: 0 },
+        maxAttempts: { type: "integer", minimum: 1 },
+        questionResults: {
+          type: "array",
+          items: { $ref: "#/components/schemas/EvaluationQuestionResult" },
+        },
+        completedAt: { type: ["string", "null"], format: "date-time" },
+        createdAt: { type: "string", format: "date-time" },
+        updatedAt: { type: "string", format: "date-time" },
+      },
+    },
+    StudentAssignmentEvaluation: {
+      type: "object",
+      required: ["id", "score", "maxScore", "feedback", "status", "isFinal"],
+      properties: {
+        id: { type: "string", format: "uuid" },
+        score: { type: ["number", "null"] },
+        maxScore: { type: "number" },
+        feedback: { type: ["string", "null"] },
+        status: {
+          type: "string",
+          enum: ["PENDING", "PROCESSING", "COMPLETED", "FAILED"],
+        },
+        isFinal: { type: "boolean" },
+        evaluatedAt: { type: ["string", "null"], format: "date-time" },
+      },
+    },
+    StudentAssignmentFile: {
+      type: "object",
+      required: ["id", "name", "sizeBytes", "mimeType"],
+      properties: {
+        id: { type: "string", format: "uuid" },
+        name: { type: "string" },
+        sizeBytes: { type: "integer" },
+        mimeType: { type: "string" },
+        downloadUrl: { type: "string" },
+      },
+    },
+    StudentAssignmentSubmission: {
+      type: "object",
+      required: ["id", "attemptNumber", "status"],
+      properties: {
+        id: { type: "string", format: "uuid" },
+        attemptNumber: { type: "integer", minimum: 1 },
+        status: { type: "string", enum: ["DRAFT", "SUBMITTED"] },
+        submittedAt: { type: ["string", "null"], format: "date-time" },
+        evaluation: {
+          type: ["object", "null"],
+          $ref: "#/components/schemas/StudentAssignmentEvaluation",
+        },
+      },
+    },
+    StudentAssignmentDetailSubmission: {
+      type: "object",
+      required: ["id", "attemptNumber", "status", "files"],
+      properties: {
+        id: { type: "string", format: "uuid" },
+        attemptNumber: { type: "integer", minimum: 1 },
+        status: { type: "string", enum: ["DRAFT", "SUBMITTED"] },
+        submittedAt: { type: ["string", "null"], format: "date-time" },
+        files: {
+          type: "array",
+          items: { $ref: "#/components/schemas/StudentAssignmentFile" },
+        },
+        evaluation: {
+          type: ["object", "null"],
+          $ref: "#/components/schemas/StudentAssignmentEvaluation",
+        },
+      },
+    },
+    StudentAssignmentAppeal: {
+      type: "object",
+      required: ["id", "status", "reason", "createdAt"],
+      properties: {
+        id: { type: "string", format: "uuid" },
+        status: {
+          type: "string",
+          enum: [
+            "SUBMITTED",
+            "UNDER_REVIEW",
+            "ACCEPTED",
+            "REJECTED",
+            "CANCELLED",
+          ],
+        },
+        reason: { type: "string" },
+        resolution: { type: ["string", "null"] },
+        resolvedAt: { type: ["string", "null"], format: "date-time" },
+        createdAt: { type: "string", format: "date-time" },
+      },
+    },
+    StudentAssignment: {
+      allOf: [
+        { $ref: "#/components/schemas/Assignment" },
+        {
           type: "object",
-          required: ["id", "maxScore", "status", "isFinal"],
+          required: ["studentStatus"],
+          properties: {
+            studentStatus: {
+              type: "string",
+              enum: ["NOT_STARTED", "DRAFT", "SUBMITTED", "GRADED", "OVERDUE"],
+            },
+            submission: {
+              type: ["object", "null"],
+              $ref: "#/components/schemas/StudentAssignmentSubmission",
+            },
+          },
+        },
+      ],
+    },
+    StudentAssignmentDetail: {
+      allOf: [
+        { $ref: "#/components/schemas/Assignment" },
+        {
+          type: "object",
+          required: ["studentStatus"],
+          properties: {
+            studentStatus: {
+              type: "string",
+              enum: ["NOT_STARTED", "DRAFT", "SUBMITTED", "GRADED", "OVERDUE"],
+            },
+            submission: {
+              type: ["object", "null"],
+              $ref: "#/components/schemas/StudentAssignmentDetailSubmission",
+            },
+            appeal: {
+              type: ["object", "null"],
+              $ref: "#/components/schemas/StudentAssignmentAppeal",
+            },
+          },
+        },
+      ],
+    },
+    AppealFile: {
+      type: "object",
+      properties: {
+        appealId: { type: "string", format: "uuid" },
+        fileId: { type: "string", format: "uuid" },
+        file: {
+          type: "object",
           properties: {
             id: { type: "string", format: "uuid" },
-            score: { type: ["number", "null"] },
-            maxScore: { type: "number" },
-            feedback: { type: ["string", "null"] },
-            status: {
-              type: "string",
-              enum: ["PENDING", "PROCESSING", "COMPLETED", "FAILED"],
-            },
-            score: { type: ["number", "null"] },
-            maxScore: { type: "number" },
-            feedback: { type: ["string", "null"] },
-            selectionSummary: { type: ["string", "null"] },
-            confidence: { type: ["number", "null"] },
-            model: { type: "string" },
-            promptVersion: { type: "string" },
-            isFinal: { type: "boolean" },
-            errorMessage: { type: ["string", "null"] },
-            questionResults: {
-              type: "array",
-              items: { $ref: "#/components/schemas/EvaluationQuestionResult" },
-              isFinal: { type: "boolean" },
-              evaluatedAt: { type: ["string", "null"], format: "date-time" },
-            },
+            originalName: { type: "string" },
+            mimeType: { type: "string" },
+            sizeBytes: { type: "integer" },
+            s3Key: { type: "string" },
           },
-          StudentAssignmentFile: {
-            type: "object",
-            required: ["id", "name", "sizeBytes", "mimeType"],
-            properties: {
-              id: { type: "string", format: "uuid" },
-              name: { type: "string" },
-              sizeBytes: { type: "integer" },
-              mimeType: { type: "string" },
-              downloadUrl: { type: "string" },
-            },
-          },
-          StudentAssignmentSubmission: {
-            type: "object",
-            required: ["id", "attemptNumber", "status"],
-            properties: {
-              id: { type: "string", format: "uuid" },
-              attemptNumber: { type: "integer", minimum: 1 },
-              status: { type: "string", enum: ["DRAFT", "SUBMITTED"] },
-              submittedAt: { type: ["string", "null"], format: "date-time" },
-              evaluation: {
-                type: ["object", "null"],
-                $ref: "#/components/schemas/StudentAssignmentEvaluation",
-              },
-            },
-          },
-          StudentAssignmentDetailSubmission: {
-            type: "object",
-            required: ["id", "attemptNumber", "status", "files"],
-            properties: {
-              id: { type: "string", format: "uuid" },
-              attemptNumber: { type: "integer", minimum: 1 },
-              status: { type: "string", enum: ["DRAFT", "SUBMITTED"] },
-              submittedAt: { type: ["string", "null"], format: "date-time" },
-              files: {
-                type: "array",
-                items: { $ref: "#/components/schemas/StudentAssignmentFile" },
-              },
-              evaluation: {
-                type: ["object", "null"],
-                $ref: "#/components/schemas/StudentAssignmentEvaluation",
-              },
-            },
-          },
-          StudentAssignmentAppeal: {
-            type: "object",
-            required: ["id", "status", "reason", "createdAt"],
-            properties: {
-              id: { type: "string", format: "uuid" },
-              status: {
-                type: "string",
-                enum: [
-                  "SUBMITTED",
-                  "UNDER_REVIEW",
-                  "ACCEPTED",
-                  "REJECTED",
-                  "CANCELLED",
-                ],
-              },
-              reason: { type: "string" },
-              resolution: { type: ["string", "null"] },
-              resolvedAt: { type: ["string", "null"], format: "date-time" },
-              createdAt: { type: "string", format: "date-time" },
-            },
-          },
-          StudentAssignment: {
-            allOf: [
-              { $ref: "#/components/schemas/Assignment" },
-              {
-                type: "object",
-                required: ["studentStatus"],
-                properties: {
-                  studentStatus: {
-                    type: "string",
-                    enum: [
-                      "NOT_STARTED",
-                      "DRAFT",
-                      "SUBMITTED",
-                      "GRADED",
-                      "OVERDUE",
-                    ],
-                  },
-                  submission: {
-                    type: ["object", "null"],
-                    $ref: "#/components/schemas/StudentAssignmentSubmission",
-                  },
-                },
-              },
-            ],
-          },
-          StudentAssignmentDetail: {
-            allOf: [
-              { $ref: "#/components/schemas/Assignment" },
-              {
-                type: "object",
-                required: ["studentStatus"],
-                properties: {
-                  studentStatus: {
-                    type: "string",
-                    enum: [
-                      "NOT_STARTED",
-                      "DRAFT",
-                      "SUBMITTED",
-                      "GRADED",
-                      "OVERDUE",
-                    ],
-                  },
-                  submission: {
-                    type: ["object", "null"],
-                    $ref: "#/components/schemas/StudentAssignmentDetailSubmission",
-                  },
-                  appeal: {
-                    type: ["object", "null"],
-                    $ref: "#/components/schemas/StudentAssignmentAppeal",
-                  },
-                },
-              },
-            ],
-          },
-          AppealFile: {
-            type: "object",
-            properties: {
-              appealId: { type: "string", format: "uuid" },
-              fileId: { type: "string", format: "uuid" },
-              file: {
-                type: "object",
-                properties: {
-                  id: { type: "string", format: "uuid" },
-                  originalName: { type: "string" },
-                  mimeType: { type: "string" },
-                  sizeBytes: { type: "integer" },
-                  s3Key: { type: "string" },
-                },
-              },
-            },
-          },
-          AppealCourse: {
+        },
+      },
+    },
+    AppealCourse: {
             type: "object",
             properties: {
               id: { type: "string", format: "uuid" },
@@ -550,14 +543,19 @@ export const openApiComponents = {
           },
           ResolveAppealRequest: {
             type: "object",
-            required: ["status", "resolution", "reviewerId"],
+            required: ["status", "resolution"],
             properties: {
               status: {
                 type: "string",
                 enum: ["ACCEPTED", "REJECTED"],
               },
               resolution: { type: "string" },
-              reviewerId: { type: "string", format: "uuid" },
+              reviewerId: {
+                type: "string",
+                format: "uuid",
+                description:
+                  "Optional when lecturer identity is derived from the LTI session.",
+              },
               newScore: { type: "number", minimum: 0 },
             },
           },
@@ -959,7 +957,10 @@ export const openApiComponents = {
               percentage: { type: "number", example: 95 },
               isFinal: { type: "boolean", example: true },
               feedback: { type: "string", nullable: true },
-              evaluatedAt: { type: "string", format: "date-time" },
+              evaluatedAt: {
+                type: ["string", "null"],
+                format: "date-time",
+              },
             },
           },
           LecturerAssignmentAppealInfo: {
@@ -1067,7 +1068,4 @@ export const openApiComponents = {
             },
           },
         },
-      },
-    },
-  },
-};
+      };

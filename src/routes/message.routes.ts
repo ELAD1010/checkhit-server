@@ -49,34 +49,6 @@ messageRouter.get("/messages/unread-count", getUnreadCount);
 
 /**
  * @openapi
- * /users/{userId}/messages/unread-count:
- *   get:
- *     tags: [Messages]
- *     summary: Get unread messages count for a specific user ID
- *     parameters:
- *       - in: path
- *         name: userId
- *         required: true
- *         description: User ID
- *         schema:
- *           type: string
- *           format: uuid
- *     responses:
- *       200:
- *         description: Unread count response
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/MessageUnreadCountResponse'
- *       400:
- *         description: Invalid user ID
- *       500:
- *         description: Server error
- */
-messageRouter.get("/users/:userId/messages/unread-count", getUnreadCount);
-
-/**
- * @openapi
  * /messages:
  *   get:
  *     tags: [Messages]
