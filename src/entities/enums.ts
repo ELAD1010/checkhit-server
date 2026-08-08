@@ -32,6 +32,19 @@ export enum EvaluationStatus {
   FAILED = "FAILED",
 }
 
+export enum QuestionImportStatus {
+  PENDING = "PENDING",
+  PROCESSING = "PROCESSING",
+  COMPLETED = "COMPLETED",
+  FAILED = "FAILED",
+  SUPERSEDED = "SUPERSEDED",
+}
+
+export enum QuestionSource {
+  MANUAL = "MANUAL",
+  DOCUMENT_IMPORT = "DOCUMENT_IMPORT",
+}
+
 export enum AppealStatus {
   SUBMITTED = "SUBMITTED",
   UNDER_REVIEW = "UNDER_REVIEW",

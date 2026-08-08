@@ -1,11 +1,13 @@
 import dotenv from "dotenv";
 import Database from "ltijs-sequelize";
+import { validateGradingConfig } from "./config/grading.config.js";
 import { initializeDatabases } from "./database/initialize-databases.js";
 import { boostrapLti } from "./lti-boostrap.js";
 
 dotenv.config();
 
 const startServer = async (): Promise<void> => {
+  validateGradingConfig();
   await initializeDatabases();
 
   const ltiDatabase = new Database(

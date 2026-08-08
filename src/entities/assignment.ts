@@ -11,6 +11,8 @@ import {
   Relation,
   UpdateDateColumn,
 } from "typeorm";
+import { AssignmentQuestion } from "./assignment-question.js";
+import { AssignmentQuestionImport } from "./assignment-question-import.js";
 import { Course } from "./course.js";
 import { decimalToNumber } from "./decimal-to-number.transformer.js";
 import { AssignmentStatus } from "./enums.js";
@@ -49,6 +51,13 @@ export class Assignment {
   evaluationInstructions!: string;
 
   @Column({
+    name: "question_selection_instructions",
+    type: "text",
+    nullable: true,
+  })
+  questionSelectionInstructions!: string | null;
+
+  @Column({
     name: "max_score",
     type: "numeric",
     precision: 8,
@@ -84,6 +93,15 @@ export class Assignment {
 
   @OneToMany(() => Submission, (submission) => submission.assignment)
   submissions!: Relation<Submission>[];
+
+  @OneToMany(() => AssignmentQuestion, (question) => question.assignment)
+  questions!: Relation<AssignmentQuestion>[];
+
+  @OneToMany(
+    () => AssignmentQuestionImport,
+    (questionImport) => questionImport.assignment,
+  )
+  questionImports!: Relation<AssignmentQuestionImport>[];
 
   @CreateDateColumn({ name: "created_at", type: "timestamptz" })
   createdAt!: Date;

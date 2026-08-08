@@ -116,7 +116,10 @@ export class AssignmentStudentNotFoundError extends Error {
 }
 
 export class StudentNotEnrolledInCourseError extends Error {
-  constructor(readonly studentId: string, readonly courseId: string) {
+  constructor(
+    readonly studentId: string,
+    readonly courseId: string,
+  ) {
     super(`Student ${studentId} is not enrolled in course ${courseId}`);
     this.name = "StudentNotEnrolledInCourseError";
   }
@@ -155,7 +158,7 @@ export type LecturerAssignmentEvaluationInfo = {
   percentage: number;
   isFinal: boolean;
   feedback?: string | null;
-  evaluatedAt: Date;
+  evaluatedAt: Date | null;
 };
 
 export type LecturerAssignmentAppealInfo = {
@@ -232,6 +235,7 @@ export class AssignmentRepository {
         description: input.description,
         type: input.type,
         evaluationInstructions: input.evaluationInstructions,
+        questionSelectionInstructions: null,
         maxScore: input.maxScore,
         startAt: input.startAt ?? null,
         dueAt: input.dueAt ?? null,
@@ -309,7 +313,7 @@ export class AssignmentRepository {
           feedback: finalEval.feedback,
           status: finalEval.status,
           isFinal: finalEval.isFinal,
-          evaluatedAt: finalEval.createdAt,
+          evaluatedAt: finalEval.completedAt,
         };
       }
 
@@ -519,14 +523,12 @@ export class AssignmentRepository {
       throw new AssignmentStudentNotFoundError(studentId);
     }
 
-    const enrollments = await this.dataSource
-      .getRepository(Enrollment)
-      .find({
-        where: {
-          studentId,
-          status: MembershipStatus.ACTIVE,
-        },
-      });
+    const enrollments = await this.dataSource.getRepository(Enrollment).find({
+      where: {
+        studentId,
+        status: MembershipStatus.ACTIVE,
+      },
+    });
 
     if (enrollments.length === 0) {
       return [];
@@ -865,7 +867,7 @@ export class AssignmentRepository {
               percentage: pct,
               isFinal: finalEval.isFinal,
               feedback: finalEval.feedback,
-              evaluatedAt: finalEval.createdAt,
+              evaluatedAt: finalEval.completedAt,
             };
           }
 

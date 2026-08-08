@@ -13,7 +13,7 @@ const openApiDocument = swaggerJsdoc({
       title: "CheckHit API",
       version: "1.0.0",
       description:
-        "API for students, lecturers, courses, assignments, and Moodle LTI deep linking.",
+        "API for students, lecturers, courses, assignments, AI grading, and Moodle LTI deep linking.",
     },
     servers: [{ url: "/api" }],
     security: [{ ltiToken: [] }],
@@ -22,6 +22,9 @@ const openApiDocument = swaggerJsdoc({
       { name: "Lecturers" },
       { name: "Courses" },
       { name: "Assignments" },
+      { name: "Questions" },
+      { name: "Submissions" },
+      { name: "Evaluations" },
       { name: "LTI" },
     ],
     components: openApiComponents,

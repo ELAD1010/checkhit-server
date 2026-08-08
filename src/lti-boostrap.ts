@@ -10,6 +10,8 @@ import { AssignmentRepository } from "./repositories/assignment.repository.js";
 import { assignmentRouter } from "./routes/assignment.routes.js";
 import { login } from "./routes/auth.js";
 import { courseRouter } from "./routes/course.routes.js";
+import { questionRouter } from "./routes/question.routes.js";
+import { submissionRouter } from "./routes/submission.routes.js";
 import { messageRouter } from "./routes/message.routes.js";
 import { notificationRouter } from "./routes/notification.routes.js";
 import { userRouter } from "./routes/user.routes.js";
@@ -18,7 +20,8 @@ import {
   LtiLaunchSyncService,
   LtiRoleConflictError,
 } from "./services/lti-launch-sync.service.js";
-
+import { gradingWorker } from "./workers/grading.worker.js";
+import { handleUploadErrors } from "./middleware/upload.js";
 
 dotenv.config();
 
@@ -130,7 +133,9 @@ export const boostrapLti = async (db: Database): Promise<void> => {
   lti.app.use("/api", messageRouter);
   lti.app.use("/api", notificationRouter);
   lti.app.use("/api", userRouter);
-
+  lti.app.use("/api", questionRouter);
+  lti.app.use("/api", submissionRouter);
+  lti.app.use(handleUploadErrors);
 
   /**
    * @openapi
@@ -223,6 +228,19 @@ export const boostrapLti = async (db: Database): Promise<void> => {
   console.log(
     `🚀 LTI Tool Provider Engine live on port ${process.env.PORT || 3001}`,
   );
+
+  gradingWorker.start();
+
+  const shutdown = async (): Promise<void> => {
+    await gradingWorker.stop();
+  };
+
+  process.once("SIGINT", () => {
+    void shutdown().finally(() => process.exit(0));
+  });
+  process.once("SIGTERM", () => {
+    void shutdown().finally(() => process.exit(0));
+  });
 
   // Register the Moodle Platform dynamically or keep it in your code config
   await registerMoodlePlatform();
