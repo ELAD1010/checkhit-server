@@ -1,4 +1,5 @@
 import "dotenv/config";
+import { randomUUID } from "node:crypto";
 import { AppDataSource } from "./database/data-source.js";
 import {
   User,
@@ -11,10 +12,13 @@ import {
   Resource,
   Submission,
   Evaluation,
+  EvaluationAudit,
+  EvaluationQuestionResult,
   Appeal,
   Notification,
   Message,
   MessageRecipient,
+  AssignmentQuestion,
   UserRole,
   LecturerPermission,
   MembershipStatus,
@@ -24,6 +28,7 @@ import {
   AppealStatus,
   NotificationCategory,
   MessageTargetType,
+  QuestionSource,
 } from "./entities/index.js";
 
 
@@ -331,8 +336,13 @@ async function seed() {
     const enrollmentRepo = AppDataSource.getRepository(Enrollment);
     const resourceRepo = AppDataSource.getRepository(Resource);
     const assignmentRepo = AppDataSource.getRepository(Assignment);
+    const assignmentQuestionRepo = AppDataSource.getRepository(AssignmentQuestion);
     const submissionRepo = AppDataSource.getRepository(Submission);
     const evaluationRepo = AppDataSource.getRepository(Evaluation);
+    const evaluationQuestionResultRepo = AppDataSource.getRepository(
+      EvaluationQuestionResult,
+    );
+    const evaluationAuditRepo = AppDataSource.getRepository(EvaluationAudit);
     const appealRepo = AppDataSource.getRepository(Appeal);
 
     // 1. Seed Lecturers
@@ -468,6 +478,8 @@ async function seed() {
             description: aData.description,
             type: aData.type,
             evaluationInstructions: aData.evaluationInstructions,
+            questionSelectionInstructions:
+              "Evaluate every seeded question and include each result in the final score.",
             maxScore: aData.maxScore,
             status: aData.status,
             startAt,
@@ -480,7 +492,199 @@ async function seed() {
     }
     console.log(`✓ ${courseMap.size} Courses and ${assignmentMap.size} Assignments seeded.`);
 
-    // 4. Seed Course Enrollments
+    // 4. Seed Assignment Question Sets
+    console.log("Seeding Assignment Question Sets...");
+    const questionSetMap = new Map<
+      string,
+      { questionSetId: string; questions: AssignmentQuestion[] }
+    >();
+
+    for (const assignment of assignmentMap.values()) {
+      const activeQuestions = await assignmentQuestionRepo.find({
+        where: { assignmentId: assignment.id, isActive: true },
+        order: { createdAt: "DESC", orderIndex: "ASC" },
+      });
+
+      let questions: AssignmentQuestion[];
+      if (activeQuestions.length > 0) {
+        const activeQuestionSetId = activeQuestions[0].questionSetId;
+        questions = activeQuestions
+          .filter((question) => question.questionSetId === activeQuestionSetId)
+          .sort((left, right) => left.orderIndex - right.orderIndex);
+      } else {
+        const questionSetId = randomUUID();
+        const primaryMaxScore =
+          Math.round(assignment.maxScore * 0.7 * 100) / 100;
+        const qualityMaxScore =
+          Math.round((assignment.maxScore - primaryMaxScore) * 100) / 100;
+
+        questions = await assignmentQuestionRepo.save([
+          assignmentQuestionRepo.create({
+            assignmentId: assignment.id,
+            questionKey: "core-requirements",
+            questionSetId,
+            isActive: true,
+            orderIndex: 0,
+            prompt: assignment.description,
+            rubric: assignment.evaluationInstructions,
+            maxScore: primaryMaxScore,
+            source: QuestionSource.MANUAL,
+            importId: null,
+          }),
+          assignmentQuestionRepo.create({
+            assignmentId: assignment.id,
+            questionKey: "quality-and-completeness",
+            questionSetId,
+            isActive: true,
+            orderIndex: 1,
+            prompt:
+              "Assess the submission's correctness, completeness, clarity, and adherence to the assignment instructions.",
+            rubric: assignment.evaluationInstructions,
+            maxScore: qualityMaxScore,
+            source: QuestionSource.MANUAL,
+            importId: null,
+          }),
+        ]);
+      }
+
+      questionSetMap.set(assignment.id, {
+        questionSetId: questions[0].questionSetId,
+        questions,
+      });
+    }
+    console.log(`✓ ${questionSetMap.size} Assignment Question Sets seeded.`);
+
+    const seedCompletedEvaluation = async ({
+      submission,
+      assignment,
+      score,
+      feedback,
+      model,
+      promptVersion,
+      confidence,
+    }: {
+      submission: Submission;
+      assignment: Assignment;
+      score: number;
+      feedback: string;
+      model: string;
+      promptVersion: string;
+      confidence: number;
+    }): Promise<Evaluation> => {
+      const questionSet = questionSetMap.get(assignment.id);
+      if (!questionSet) {
+        throw new Error(`Question set not found for assignment ${assignment.id}`);
+      }
+
+      let evaluation = await evaluationRepo.findOne({
+        where: { submissionId: submission.id, isFinal: true },
+        order: { createdAt: "DESC" },
+      });
+
+      const completedAt = submission.submittedAt ?? new Date();
+      if (evaluation) {
+        Object.assign(evaluation, {
+          questionSetId: questionSet.questionSetId,
+          score,
+          maxScore: assignment.maxScore,
+          feedback,
+          selectionSummary: "All seeded questions were evaluated.",
+          model,
+          promptVersion,
+          confidence,
+          status: EvaluationStatus.COMPLETED,
+          isFinal: true,
+          nextAttemptAt: null,
+          completedAt,
+          errorMessage: null,
+        });
+      } else {
+        evaluation = evaluationRepo.create({
+          submissionId: submission.id,
+          questionSetId: questionSet.questionSetId,
+          score,
+          maxScore: assignment.maxScore,
+          feedback,
+          selectionSummary: "All seeded questions were evaluated.",
+          model,
+          promptVersion,
+          confidence,
+          status: EvaluationStatus.COMPLETED,
+          isFinal: true,
+          attemptCount: 1,
+          maxAttempts: 3,
+          nextAttemptAt: null,
+          startedAt: completedAt,
+          completedAt,
+          errorMessage: null,
+        });
+      }
+      evaluation = await evaluationRepo.save(evaluation);
+
+      await evaluationQuestionResultRepo.delete({
+        evaluationId: evaluation.id,
+      });
+
+      let allocatedScore = 0;
+      const questionResults = questionSet.questions.map((question, index) => {
+        const isLast = index === questionSet.questions.length - 1;
+        const proportionalScore =
+          Math.round(
+            ((score * question.maxScore) / assignment.maxScore) * 100,
+          ) / 100;
+        const questionScore = isLast
+          ? Math.round((score - allocatedScore) * 100) / 100
+          : proportionalScore;
+        allocatedScore += questionScore;
+
+        return evaluationQuestionResultRepo.create({
+          evaluationId: evaluation.id,
+          questionId: question.id,
+          score: Math.min(question.maxScore, Math.max(0, questionScore)),
+          maxScore: question.maxScore,
+          feedback,
+          evidence: submission.answerText,
+          isAnswered: true,
+          countsTowardTotal: true,
+          selectionReason: "Included by the seeded all-questions policy.",
+          confidence,
+        });
+      });
+      await evaluationQuestionResultRepo.save(questionResults);
+
+      let audit = await evaluationAuditRepo.findOne({
+        where: { evaluationId: evaluation.id },
+      });
+      const auditData = {
+        requestPayload: {
+          source: "seed",
+          submissionId: submission.id,
+          questionSetId: questionSet.questionSetId,
+        },
+        rawResponse: {
+          score,
+          feedback,
+          questionCount: questionSet.questions.length,
+        },
+        providerRequestId: null,
+        tokenUsage: null,
+        latencyMs: 0,
+        validationErrors: null,
+      };
+      if (audit) {
+        Object.assign(audit, auditData);
+      } else {
+        audit = evaluationAuditRepo.create({
+          evaluationId: evaluation.id,
+          ...auditData,
+        });
+      }
+      await evaluationAuditRepo.save(audit);
+
+      return evaluation;
+    };
+
+    // 5. Seed Course Enrollments
     console.log("Seeding Enrollments...");
     const studentList = Array.from(studentMap.values());
     const courseList = Array.from(courseMap.values());
@@ -524,7 +728,7 @@ async function seed() {
     }
     console.log(`✓ ${enrollmentCount} Student Enrollments seeded.`);
 
-    // 5. Seed Submissions, Evaluations, and Appeals
+    // 6. Seed Submissions, Evaluations, and Appeals
     console.log("Seeding Submissions, AI Evaluations & Appeals...");
 
     const hw1 = assignmentMap.get("Homework 1: Hello World & Variables");
@@ -561,18 +765,15 @@ async function seed() {
         });
         await submissionRepo.save(sub);
 
-        const evalRecord = evaluationRepo.create({
-          submissionId: sub.id,
+        await seedCompletedEvaluation({
+          submission: sub,
+          assignment: hw1,
           score: 98.5,
-          maxScore: 100,
           feedback: "Outstanding code clarity, explicit TypeScript typing, and accurate arithmetic computation.",
           model: "gemini-2.5-pro",
           promptVersion: "v1.4",
           confidence: 0.98,
-          status: EvaluationStatus.COMPLETED,
-          isFinal: true,
         });
-        await evaluationRepo.save(evalRecord);
       }
     }
 
@@ -592,18 +793,15 @@ async function seed() {
         });
         await submissionRepo.save(sub);
 
-        const evalRecord = evaluationRepo.create({
-          submissionId: sub.id,
+        const evalRecord = await seedCompletedEvaluation({
+          submission: sub,
+          assignment: hw1,
           score: 84.0,
-          maxScore: 100,
           feedback: "Good concise solution. Deducted points for missing required product calculation and lack of descriptive comments.",
           model: "gemini-2.5-pro",
           promptVersion: "v1.4",
           confidence: 0.92,
-          status: EvaluationStatus.COMPLETED,
-          isFinal: true,
         });
-        await evaluationRepo.save(evalRecord);
 
         // Bob submits appeal
         const appeal = appealRepo.create({
@@ -654,18 +852,15 @@ async function seed() {
         });
         await submissionRepo.save(sub);
 
-        const evalRecord = evaluationRepo.create({
-          submissionId: sub.id,
+        await seedCompletedEvaluation({
+          submission: sub,
+          assignment: lab1,
           score: 96.0,
-          maxScore: 100,
           feedback: "Excellent doubly linked list implementation with O(1) head/tail operations and comprehensive null checks.",
           model: "gemini-2.5-pro",
           promptVersion: "v1.4",
           confidence: 0.97,
-          status: EvaluationStatus.COMPLETED,
-          isFinal: true,
         });
-        await evaluationRepo.save(evalRecord);
       }
     }
 
@@ -685,18 +880,15 @@ async function seed() {
         });
         await submissionRepo.save(sub);
 
-        const evalRecord = evaluationRepo.create({
-          submissionId: sub.id,
+        const evalRecord = await seedCompletedEvaluation({
+          submission: sub,
+          assignment: lab1,
           score: 78.0,
-          maxScore: 100,
           feedback: "Good modular structure. Point deduction applied assuming getTail() had O(N) complexity.",
           model: "gemini-2.5-pro",
           promptVersion: "v1.4",
           confidence: 0.88,
-          status: EvaluationStatus.COMPLETED,
-          isFinal: true,
         });
-        await evaluationRepo.save(evalRecord);
 
         // Ethan's Appeal
         const appeal = appealRepo.create({
@@ -729,18 +921,15 @@ async function seed() {
         });
         await submissionRepo.save(sub);
 
-        const evalRecord = evaluationRepo.create({
-          submissionId: sub.id,
+        await seedCompletedEvaluation({
+          submission: sub,
+          assignment: sqlHw,
           score: 48.0,
-          maxScore: 50,
           feedback: "Great usage of Common Table Expressions and window functions for partition ranking.",
           model: "gemini-2.5-pro",
           promptVersion: "v1.4",
           confidence: 0.96,
-          status: EvaluationStatus.COMPLETED,
-          isFinal: true,
         });
-        await evaluationRepo.save(evalRecord);
       }
     }
 
@@ -760,18 +949,15 @@ async function seed() {
         });
         await submissionRepo.save(sub);
 
-        const evalRecord = evaluationRepo.create({
-          submissionId: sub.id,
+        const evalRecord = await seedCompletedEvaluation({
+          submission: sub,
+          assignment: paper,
           score: 41.5,
-          maxScore: 50,
           feedback: "Strong conceptual analysis. Missing thorough comparison with recurrent sequence models (RNN/LSTM).",
           model: "gpt-4o-mini",
           promptVersion: "v2.0",
           confidence: 0.91,
-          status: EvaluationStatus.COMPLETED,
-          isFinal: true,
         });
-        await evaluationRepo.save(evalRecord);
 
         const appeal = appealRepo.create({
           submissionId: sub.id,
@@ -803,18 +989,15 @@ async function seed() {
         });
         await submissionRepo.save(sub);
 
-        const evalRecord = evaluationRepo.create({
-          submissionId: sub.id,
+        const evalRecord = await seedCompletedEvaluation({
+          submission: sub,
+          assignment: lab1,
           score: 82.0,
-          maxScore: 100,
           feedback: "Good implementation of Stack and Linked List. Deducted 8 points for exception handling and 10 points for memory cleanup on deallocation.",
           model: "gemini-2.5-pro",
           promptVersion: "v1.4",
           confidence: 0.93,
-          status: EvaluationStatus.COMPLETED,
-          isFinal: true,
         });
-        await evaluationRepo.save(evalRecord);
 
         const appeal = appealRepo.create({
           submissionId: sub.id,
@@ -846,18 +1029,15 @@ async function seed() {
         });
         await submissionRepo.save(sub);
 
-        const evalRecord = evaluationRepo.create({
-          submissionId: sub.id,
+        const evalRecord = await seedCompletedEvaluation({
+          submission: sub,
+          assignment: aStar,
           score: 75.0,
-          maxScore: 100,
           feedback: "A* implementation finds optimal path on grid graphs, but Manhattan distance heuristic admissibility proof was considered incomplete.",
           model: "gemini-2.5-pro",
           promptVersion: "v1.4",
           confidence: 0.90,
-          status: EvaluationStatus.COMPLETED,
-          isFinal: true,
         });
-        await evaluationRepo.save(evalRecord);
 
         const appeal = appealRepo.create({
           submissionId: sub.id,
@@ -889,18 +1069,15 @@ async function seed() {
         });
         await submissionRepo.save(sub);
 
-        const evalRecord = evaluationRepo.create({
-          submissionId: sub.id,
+        const evalRecord = await seedCompletedEvaluation({
+          submission: sub,
+          assignment: midtermExam,
           score: 88.0,
-          maxScore: 100,
           feedback: "Strong performance overall. Question 4 (Radix sort vs Quick sort on floating point numbers) lacked discussion on IEEE 754 bitwise representation.",
           model: "gemini-2.5-pro",
           promptVersion: "v1.4",
           confidence: 0.94,
-          status: EvaluationStatus.COMPLETED,
-          isFinal: true,
         });
-        await evaluationRepo.save(evalRecord);
 
         const appeal = appealRepo.create({
           submissionId: sub.id,
@@ -932,18 +1109,15 @@ async function seed() {
         });
         await submissionRepo.save(sub);
 
-        const evalRecord = evaluationRepo.create({
-          submissionId: sub.id,
-          score: 79.0,
-          maxScore: 100,
+        const evalRecord = await seedCompletedEvaluation({
+          submission: sub,
+          assignment: paper,
+          score: 39.5,
           feedback: "Good literature review. Point deduction for insufficient comparative benchmark data on linear attention variants.",
           model: "gemini-2.5-pro",
           promptVersion: "v1.4",
           confidence: 0.91,
-          status: EvaluationStatus.COMPLETED,
-          isFinal: true,
         });
-        await evaluationRepo.save(evalRecord);
 
         const appeal = appealRepo.create({
           submissionId: sub.id,
@@ -962,7 +1136,7 @@ async function seed() {
     console.log("✓ Submissions, Evaluations, and Appeals seeded successfully.\n");
 
     // ==========================================
-    // 9. SEED NOTIFICATIONS
+    // 7. SEED NOTIFICATIONS
     // ==========================================
     console.log("Seeding Notifications for Students & Lecturers...");
     const notificationRepo = AppDataSource.getRepository(Notification);
@@ -1091,7 +1265,7 @@ async function seed() {
 
     console.log("✓ Notifications seeded successfully.\n");
 
-    // 10. Seed Messages & Broadcasts
+    // 8. Seed Messages & Broadcasts
     console.log("Seeding Messages & Threaded Conversations...");
     const messageRepo = AppDataSource.getRepository(Message);
     const messageRecipientRepo = AppDataSource.getRepository(MessageRecipient);
