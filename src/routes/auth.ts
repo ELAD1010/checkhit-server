@@ -2,6 +2,7 @@ import callMoodleAPI from "../api/index.js";
 import { IdToken } from "ltijs";
 import { Request, Response } from "express";
 import { LtiToken } from "../common/types/lti.js";
+import { UserRole } from "../entities/enums.js";
 import {
   LtiLaunchDataError,
   LtiLaunchSyncService,
@@ -60,8 +61,10 @@ export const login = async (
       courseMetadata,
     );
     const targetPath = synchronized.assignmentId
-      ? `assignments/${synchronized.assignmentId}`
-      : "dashboard";
+      ? `${synchronized.role === UserRole.LECTURER ? "lecturer" : "student"}/assignments/${synchronized.assignmentId}`
+      : synchronized.role === UserRole.LECTURER
+        ? "lecturer"
+        : "student";
     const frontendUrl = new URL(`${process.env.FRONTEND_URL}/${targetPath}`);
 
     frontendUrl.searchParams.set("ltik", res.locals.ltik);

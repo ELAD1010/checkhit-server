@@ -60,7 +60,7 @@ const handleDeepLinkingLaunch = async (
       token as LtiToken,
     );
     const createPageUrl = new URL(
-      `${process.env.FRONTEND_URL}/courses/${synchronized.courseId}/assignments/new`,
+      `${process.env.FRONTEND_URL}/lecturer/courses/${synchronized.courseId}/assignments/new`,
     );
 
     createPageUrl.searchParams.set("ltik", res.locals.ltik);
