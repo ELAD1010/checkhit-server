@@ -52,6 +52,7 @@ Welcome to the **CheckHit API** documentation. This REST API facilitates managin
    - [Generate Deep-Link Form (`POST /api/generate-deeplink`)](#post-apigenerate-deeplink)
 8. [7. Notifications Endpoints](#7-notifications)
    - [Get User Notifications (`GET /api/users/{userId}/notifications`)](#get-apiusersuseridnotifications)
+   - [Stream User Notifications (`GET /api/users/{userId}/notifications/stream`)](#get-apiusersuseridnotificationsstream)
    - [Get Unread Notifications Count (`GET /api/users/{userId}/notifications/unread-count`)](#get-apiusersuseridnotificationsunread-count)
    - [Mark Single Notification as Read (`PATCH /api/notifications/{id}/read`)](#patch-apinotificationsidread)
    - [Mark All Notifications as Read (`PATCH /api/users/{userId}/notifications/read-all`)](#patch-apiusersuseridnotificationsread-all)
@@ -1324,6 +1325,27 @@ Retrieves all notifications for a given user (student or lecturer), ordered by c
     }
   ]
   ```
+
+---
+
+### `GET /api/users/{userId}/notifications/stream`
+Opens a Server-Sent Events connection for immediate notification delivery. This endpoint uses the existing user UUID and does not require a configured Moodle platform.
+
+- **Events**:
+  - `connected`: The stream is ready.
+  - `notification`: A newly persisted notification object.
+  - `notification-read`: A notification was marked read in another client.
+  - `notifications-read-all`: All notifications were marked read.
+- **Browser example**:
+  ```js
+  const stream = new EventSource(`/api/users/${userId}/notifications/stream`);
+  stream.addEventListener("notification", (event) => {
+    const notification = JSON.parse(event.data);
+    console.log(notification);
+  });
+  ```
+
+The server sends heartbeat comments every 25 seconds. Clients should reconnect using the normal `EventSource` retry behavior and fetch the notification list after reconnecting to recover anything emitted while disconnected.
 
 ---
 

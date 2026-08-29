@@ -807,7 +807,7 @@ export class AssignmentRepository {
         const studentInfo: LecturerAssignmentStudentInfo = {
           userId: user.id,
           name: user.name,
-          email: user.email,
+          email: user.email ?? "",
           studentNumber: user.ltiSubject || user.id.substring(0, 8),
         };
 

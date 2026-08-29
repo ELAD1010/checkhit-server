@@ -7,6 +7,7 @@ import {
   AppealStudentNotFoundError,
 } from "../repositories/appeal.repository.js";
 import { isUuid } from "./user-controller.utils.js";
+import { notificationService } from "../services/notification.service.js";
 
 const appealRepository = new AppealRepository();
 
@@ -204,6 +205,13 @@ export const resolveAppeal = async (
       reviewerId,
       newScore: parsedScore,
     });
+
+    await notificationService.safely("appeal resolved", () =>
+      notificationService.notifyAppeal(updatedAppeal.id),
+    );
+    await notificationService.safely("appeal grade", () =>
+      notificationService.notifyEvaluationCompleted(updatedAppeal.evaluationId),
+    );
 
     res.json(updatedAppeal);
   } catch (error) {

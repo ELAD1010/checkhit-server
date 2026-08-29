@@ -4,6 +4,7 @@ import {
   getUserNotifications,
   markAllNotificationsAsRead,
   markNotificationAsRead,
+  streamUserNotifications,
 } from "../controllers/notification.controller.js";
 
 export const notificationRouter = Router();
@@ -52,6 +53,32 @@ export const notificationRouter = Router();
  *         description: Server error
  */
 notificationRouter.get("/users/:userId/notifications", getUserNotifications);
+
+/**
+ * @openapi
+ * /users/{userId}/notifications/stream:
+ *   get:
+ *     tags: [Notifications]
+ *     summary: Stream new notifications and read-state changes using Server-Sent Events
+ *     parameters:
+ *       - in: path
+ *         name: userId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     responses:
+ *       200:
+ *         description: text/event-stream containing notification, notification-read, and notifications-read-all events
+ *         content:
+ *           text/event-stream:
+ *             schema:
+ *               type: string
+ */
+notificationRouter.get(
+  "/users/:userId/notifications/stream",
+  streamUserNotifications,
+);
 
 /**
  * @openapi

@@ -590,6 +590,10 @@ export const openApiComponents = {
               isRead: { type: "boolean" },
               link: { type: ["string", "null"] },
               metadata: { type: ["object", "null"] },
+              eventKey: {
+                type: ["string", "null"],
+                description: "Stable idempotency key for this recipient event",
+              },
               readAt: { type: ["string", "null"], format: "date-time" },
               createdAt: { type: "string", format: "date-time" },
               updatedAt: { type: "string", format: "date-time" },

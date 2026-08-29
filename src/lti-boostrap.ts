@@ -22,6 +22,7 @@ import {
 } from "./services/lti-launch-sync.service.js";
 import { gradingWorker } from "./workers/grading.worker.js";
 import { handleUploadErrors } from "./middleware/upload.js";
+import { notificationWorker } from "./workers/notification.worker.js";
 
 dotenv.config();
 
@@ -30,6 +31,10 @@ const ltiLaunchSyncService = new LtiLaunchSyncService();
 const assignmentRepository = new AssignmentRepository();
 
 const registerMoodlePlatform = async (): Promise<void> => {
+  if (!process.env.MOODLE_URL || !process.env.MOODLE_CLIENT_ID) {
+    console.log("Moodle platform registration skipped (not configured)");
+    return;
+  }
   try {
     await lti.registerPlatform({
       url: process.env.MOODLE_URL, // e.g., 'https://your-moodle-domain.com'
@@ -103,7 +108,7 @@ export const boostrapLti = async (db: Database): Promise<void> => {
   );
 
   lti.whitelist(
-    { route: new RegExp(/^\/api\/.*/), method: "ALL" },
+    { route: new RegExp(/^\/api\/.*/) as unknown as string, method: "ALL" },
     "/api-docs",
     "/api-docs/",
     "/api-docs.json",
@@ -230,9 +235,11 @@ export const boostrapLti = async (db: Database): Promise<void> => {
   );
 
   gradingWorker.start();
+  notificationWorker.start();
 
   const shutdown = async (): Promise<void> => {
     await gradingWorker.stop();
+    notificationWorker.stop();
   };
 
   process.once("SIGINT", () => {
