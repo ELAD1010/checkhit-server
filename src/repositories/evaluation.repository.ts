@@ -6,6 +6,7 @@ import { EvaluationAudit } from "../entities/evaluation-audit.js";
 import { EvaluationQuestionResult } from "../entities/evaluation-question-result.js";
 import { EvaluationStatus } from "../entities/enums.js";
 import { Submission } from "../entities/submission.js";
+import { evaluationRealtime } from "../realtime/evaluation-realtime.js";
 import { SubmissionNotFoundError } from "./submission.repository.js";
 
 export type CreateEvaluationInput = {
@@ -56,7 +57,7 @@ export class EvaluationRepository {
   constructor(private readonly dataSource: DataSource = AppDataSource) {}
 
   async createPending(input: CreateEvaluationInput): Promise<Evaluation> {
-    return this.dataSource.transaction(async (manager) => {
+    const evaluation = await this.dataSource.transaction(async (manager) => {
       const submission = await manager.getRepository(Submission).findOne({
         where: { id: input.submissionId },
         lock: { mode: "pessimistic_write" },
@@ -107,6 +108,8 @@ export class EvaluationRepository {
         }),
       );
     });
+    await evaluationRealtime.publishEvaluation(evaluation.id);
+    return evaluation;
   }
 
   async findPendingBySubmissionId(
@@ -167,6 +170,7 @@ export class EvaluationRepository {
     evaluation.startedAt ??= now;
     evaluation.attemptCount += 1;
     await repository.save(evaluation);
+    await evaluationRealtime.publishEvaluation(evaluation.id);
     return evaluation;
   }
 
@@ -190,13 +194,18 @@ export class EvaluationRepository {
 
     if (interrupted.length > 0) {
       await repository.save(interrupted);
+      await Promise.all(
+        interrupted.map((evaluation) =>
+          evaluationRealtime.publishEvaluation(evaluation.id),
+        ),
+      );
     }
   }
 
   async persistCompleted(
     input: PersistCompletedEvaluationInput,
   ): Promise<Evaluation> {
-    return this.dataSource.transaction(async (manager) => {
+    const evaluation = await this.dataSource.transaction(async (manager) => {
       const evaluation = await manager.getRepository(Evaluation).findOne({
         where: {
           id: input.evaluationId,
@@ -285,6 +294,8 @@ export class EvaluationRepository {
 
       return this.findById(evaluation.id, manager) as Promise<Evaluation>;
     });
+    await evaluationRealtime.publishEvaluation(evaluation.id);
+    return evaluation;
   }
 
   async markFailedOrRetry(
@@ -347,5 +358,6 @@ export class EvaluationRepository {
         }
       }
     });
+    await evaluationRealtime.publishEvaluation(evaluation.id);
   }
 }

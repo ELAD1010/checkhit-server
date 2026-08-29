@@ -1,6 +1,7 @@
 import dotenv from "dotenv";
 import { Database, IdToken, Provider } from "ltijs";
 import express from "express";
+import { createServer } from "node:http";
 import { Request, Response } from "express";
 import { LtiToken } from "./common/types/lti.js";
 import { setupSwagger } from "./docs/swagger.js";
@@ -14,6 +15,7 @@ import { questionRouter } from "./routes/question.routes.js";
 import { submissionRouter } from "./routes/submission.routes.js";
 import { messageRouter } from "./routes/message.routes.js";
 import { notificationRouter } from "./routes/notification.routes.js";
+import { realtimeRouter } from "./routes/realtime.routes.js";
 import { userRouter } from "./routes/user.routes.js";
 import {
   LtiLaunchDataError,
@@ -22,6 +24,11 @@ import {
 } from "./services/lti-launch-sync.service.js";
 import { gradingWorker } from "./workers/grading.worker.js";
 import { handleUploadErrors } from "./middleware/upload.js";
+import { evaluationRealtime } from "./realtime/evaluation-realtime.js";
+import {
+  backdateAndResignJwt,
+  createDeepLinkSubmissionForm,
+} from "./services/deep-link-token.service.js";
 
 dotenv.config();
 
@@ -103,7 +110,10 @@ export const boostrapLti = async (db: Database): Promise<void> => {
   );
 
   lti.whitelist(
-    { route: new RegExp(/^\/api\/.*/), method: "ALL" },
+    {
+      route: /^\/api\/.*/ as unknown as string,
+      method: "ALL",
+    },
     "/api-docs",
     "/api-docs/",
     "/api-docs.json",
@@ -132,6 +142,7 @@ export const boostrapLti = async (db: Database): Promise<void> => {
   lti.app.use("/api", courseRouter);
   lti.app.use("/api", messageRouter);
   lti.app.use("/api", notificationRouter);
+  lti.app.use("/api", realtimeRouter);
   lti.app.use("/api", userRouter);
   lti.app.use("/api", questionRouter);
   lti.app.use("/api", submissionRouter);
@@ -178,9 +189,14 @@ export const boostrapLti = async (db: Database): Promise<void> => {
         return res.status(401).send("Unauthorized: Missing LTI session");
       }
 
-      const synchronized = await ltiLaunchSyncService.synchronize(
-        res.locals.token as LtiToken,
-      );
+      const launchToken = res.locals.token as LtiToken & {
+        platformContext: LtiToken["platformContext"] & {
+          deepLinkingSettings?: {
+            deep_link_return_url?: string;
+          };
+        };
+      };
+      const synchronized = await ltiLaunchSyncService.synchronize(launchToken);
 
       if (synchronized.role !== UserRole.LECTURER) {
         return res.status(403).send("Only lecturers can create deep links");
@@ -211,11 +227,34 @@ export const boostrapLti = async (db: Database): Promise<void> => {
         },
       ];
 
-      const formHtml = await lti.DeepLinking.createDeepLinkingForm(
-        res.locals.token,
+      const message = await lti.DeepLinking.createDeepLinkingMessage(
+        launchToken,
         contentItems,
         { message: "המטלה נוצרה וצורפה לקורס בהצלחה!" },
       );
+      if (typeof message !== "string") {
+        throw new Error("Deep-link message could not be created");
+      }
+      const returnUrl =
+        launchToken.platformContext.deepLinkingSettings?.deep_link_return_url;
+      if (!returnUrl || !launchToken.clientId) {
+        throw new Error("Deep-link launch context is incomplete");
+      }
+
+      const platform = await lti.getPlatform(
+        launchToken.iss,
+        launchToken.clientId,
+      );
+      if (!platform || Array.isArray(platform)) {
+        throw new Error("Deep-link platform was not found");
+      }
+      const privateKey = await platform.platformPrivateKey();
+      if (typeof privateKey !== "string") {
+        throw new Error("Deep-link signing key was not found");
+      }
+
+      const adjustedMessage = backdateAndResignJwt(message, privateKey);
+      const formHtml = createDeepLinkSubmissionForm(returnUrl, adjustedMessage);
 
       return res.send(formHtml);
     } catch (error) {
@@ -224,15 +263,27 @@ export const boostrapLti = async (db: Database): Promise<void> => {
     }
   });
 
-  await lti.deploy({ port: process.env.PORT || 3001 });
+  await lti.deploy({ serverless: true, silent: true });
+  const port = Number(process.env.PORT || 3001);
+  const httpServer = createServer(lti.app);
+  evaluationRealtime.attach(httpServer);
+  await new Promise<void>((resolve, reject) => {
+    httpServer.once("error", reject);
+    httpServer.listen(port, () => {
+      httpServer.off("error", reject);
+      resolve();
+    });
+  });
   console.log(
-    `🚀 LTI Tool Provider Engine live on port ${process.env.PORT || 3001}`,
+    `🚀 LTI Tool Provider Engine live on port ${port}`,
   );
 
   gradingWorker.start();
 
   const shutdown = async (): Promise<void> => {
     await gradingWorker.stop();
+    evaluationRealtime.close();
+    await new Promise<void>((resolve) => httpServer.close(() => resolve()));
   };
 
   process.once("SIGINT", () => {

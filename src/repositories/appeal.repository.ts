@@ -5,6 +5,7 @@ import { AppealStatus, EvaluationStatus } from "../entities/enums.js";
 import { Evaluation } from "../entities/evaluation.js";
 import { Lecturer } from "../entities/lecturer.js";
 import { Student } from "../entities/student.js";
+import { evaluationRealtime } from "../realtime/evaluation-realtime.js";
 
 export class AppealStudentNotFoundError extends Error {
   constructor(studentId: string) {
@@ -281,7 +282,8 @@ export class AppealRepository {
     appealId: string,
     input: ResolveAppealInput,
   ): Promise<Appeal> {
-    return this.dataSource.transaction(async (manager) => {
+    let updatedEvaluationId: string | undefined;
+    const resolvedAppeal = await this.dataSource.transaction(async (manager) => {
       const appealRepo = manager.getRepository(Appeal);
       const evalRepo = manager.getRepository(Evaluation);
       const lecturerRepo = manager.getRepository(Lecturer);
@@ -339,6 +341,7 @@ export class AppealRepository {
 
         const savedEval = await evalRepo.save(newEvaluation);
         savedEvalId = savedEval.id;
+        updatedEvaluationId = savedEval.id;
       }
 
       await appealRepo.update(appealId, {
@@ -374,5 +377,9 @@ export class AppealRepository {
         },
       }))!;
     });
+    if (updatedEvaluationId) {
+      await evaluationRealtime.publishEvaluation(updatedEvaluationId);
+    }
+    return resolvedAppeal;
   }
 }
