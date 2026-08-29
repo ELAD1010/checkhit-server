@@ -14,6 +14,35 @@ export type AuthenticatedRequest = Request & {
 
 const ltiLaunchSyncService = new LtiLaunchSyncService();
 
+export const optionalLtiAuth = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction,
+): Promise<void> => {
+  const token = res.locals.token as LtiToken | undefined;
+  if (!token) {
+    next();
+    return;
+  }
+  try {
+    req.auth = await ltiLaunchSyncService.synchronize(token);
+    next();
+  } catch (error) {
+    if (error instanceof LtiRoleConflictError) {
+      res.status(403).json({
+        message: "Moodle role conflicts with the stored global role",
+      });
+      return;
+    }
+    if (error instanceof LtiLaunchDataError) {
+      res.status(400).json({ message: error.message });
+      return;
+    }
+    console.error("Failed to resolve optional LTI identity:", error);
+    res.status(500).json({ message: "Failed to authorize request" });
+  }
+};
+
 export const requireLtiAuth = async (
   req: AuthenticatedRequest,
   res: Response,

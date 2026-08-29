@@ -43,6 +43,10 @@ Welcome to the **CheckHit API** documentation. This REST API facilitates managin
    - [Get Lecturer Assignment Overview (`GET /api/assignments/{assignmentId}/lecturer-overview`)](#get-apiassignmentsassignmentidlecturer-overview)
    - [Delete an Assignment (`DELETE /api/assignments/{assignmentId}`)](#delete-apiassignmentsassignmentid)
 6. [5. Appeals Endpoints](#5-appeals)
+   - [Create Appeal (`POST /api/appeals`)](#post-apiappeals)
+   - [Claim Appeal (`PATCH /api/appeals/{appealId}/claim`)](#patch-apiappealsappealidclaim)
+   - [Cancel Appeal (`PATCH /api/appeals/{appealId}/cancel`)](#patch-apiappealsappealidcancel)
+   - [AI Review (`POST /api/appeals/{appealId}/ai-review`)](#post-apiappealsappealidai-review)
    - [Get Student Appeals (`GET /api/students/{studentId}/appeals`)](#get-apistudentsstudentidappeals)
    - [Get Appeals for Lecturer Courses (`GET /api/lecturers/{lecturerId}/appeals`)](#get-apilecturerslectureridappeals)
    - [Get Lecturer Appeals Summary Stats (`GET /api/lecturers/{lecturerId}/appeals/stats`)](#get-apilecturerslectureridappealsstats)
@@ -1102,6 +1106,37 @@ Deletes an assignment by ID along with its submissions and evaluations.
 ---
 
 ## 5. Appeals
+
+### `POST /api/appeals`
+Creates an appeal against the current completed final evaluation for a student's submission. Only one active appeal may exist for an evaluation. JSON requests accept `submissionId`, `reason`, optional `category`, and optional `fileIds`. Multipart requests additionally accept up to five `files` (`PDF`, `DOCX`, or `TXT`).
+
+When an LTI identity is present it is authoritative. For local development without Moodle, `studentId` or `X-User-Id` may be supplied; when neither is available, the submission owner is used.
+
+### `PATCH /api/appeals/{appealId}/claim`
+Assigns a submitted appeal to a lecturer and moves it to `UNDER_REVIEW`. The lecturer must belong to the assignment's course. Supply `reviewerId` when no LTI identity is available.
+
+### `PATCH /api/appeals/{appealId}/cancel`
+Allows the owning student to cancel an appeal while it is still `SUBMITTED`. Cancellation is rejected after review begins.
+
+### Appeal evidence endpoints
+
+- `POST /api/appeals/{appealId}/evidence`: attach existing `fileIds` or upload files while the appeal is still submitted.
+- `DELETE /api/appeals/{appealId}/evidence/{fileId}`: detach evidence before review.
+- `GET /api/appeals/{appealId}/evidence/{fileId}`: download attached evidence.
+
+### `POST /api/appeals/{appealId}/ai-review`
+Runs a rubric-aware Gemini review using the assignment, questions, original submission and files, original evaluation, appeal reason, and evidence. The requesting lecturer must belong to the course.
+
+```json
+{
+  "reviewerId": "5a205d7f-7084-4f91-ba7c-aeb0b6078256",
+  "autoResolve": false
+}
+```
+
+With `autoResolve: false` (default), the structured recommendation is stored on the appeal for lecturer approval. With `autoResolve: true`, the AI decision resolves the appeal and creates a separate replacement final evaluation when accepted. The original appealed evaluation remains linked for audit history.
+
+---
 
 ### `GET /api/students/{studentId}/appeals`
 Retrieves all grade appeals submitted by a student across all courses and assignments, including initial evaluations, submission details, reviewer information, and resolution status.

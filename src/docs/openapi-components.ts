@@ -496,9 +496,23 @@ export const openApiComponents = {
               id: { type: "string", format: "uuid" },
               submissionId: { type: "string", format: "uuid" },
               evaluationId: { type: "string", format: "uuid" },
+              resultEvaluationId: {
+                type: ["string", "null"],
+                format: "uuid",
+              },
               studentId: { type: "string", format: "uuid" },
               reviewerId: { type: ["string", "null"], format: "uuid" },
               reason: { type: "string" },
+              category: {
+                type: ["string", "null"],
+                enum: [
+                  "grading_error",
+                  "misunderstanding",
+                  "technical",
+                  "other",
+                  null,
+                ],
+              },
               status: {
                 type: "string",
                 enum: [
@@ -510,6 +524,16 @@ export const openApiComponents = {
                 ],
               },
               resolution: { type: ["string", "null"] },
+              reviewSource: {
+                type: ["string", "null"],
+                enum: ["LECTURER", "AI", null],
+              },
+              aiRecommendation: { type: ["object", "null"] },
+              aiModel: { type: ["string", "null"] },
+              aiReviewedAt: {
+                type: ["string", "null"],
+                format: "date-time",
+              },
               resolvedAt: { type: ["string", "null"], format: "date-time" },
               submission: { $ref: "#/components/schemas/AppealSubmission" },
               student: {
@@ -520,6 +544,10 @@ export const openApiComponents = {
                 },
               },
               evaluation: { $ref: "#/components/schemas/AppealEvaluation" },
+              resultEvaluation: {
+                type: ["object", "null"],
+                $ref: "#/components/schemas/AppealEvaluation",
+              },
               reviewer: {
                 type: ["object", "null"],
                 $ref: "#/components/schemas/Lecturer",
@@ -557,6 +585,51 @@ export const openApiComponents = {
                   "Optional when lecturer identity is derived from the LTI session.",
               },
               newScore: { type: "number", minimum: 0 },
+            },
+          },
+          CreateAppealRequest: {
+            type: "object",
+            required: ["submissionId", "reason"],
+            properties: {
+              submissionId: { type: "string", format: "uuid" },
+              studentId: {
+                type: "string",
+                format: "uuid",
+                description:
+                  "Local-development fallback when no LTI identity is available.",
+              },
+              reason: { type: "string", minLength: 20, maxLength: 5000 },
+              category: {
+                type: "string",
+                enum: [
+                  "grading_error",
+                  "misunderstanding",
+                  "technical",
+                  "other",
+                ],
+              },
+              fileIds: {
+                type: "array",
+                maxItems: 5,
+                items: { type: "string", format: "uuid" },
+              },
+            },
+          },
+          AiAppealReviewRequest: {
+            type: "object",
+            properties: {
+              reviewerId: {
+                type: "string",
+                format: "uuid",
+                description:
+                  "Local-development fallback when no LTI identity is available.",
+              },
+              autoResolve: {
+                type: "boolean",
+                default: false,
+                description:
+                  "When false, store a recommendation for lecturer approval. When true, apply the AI decision and grade.",
+              },
             },
           },
           Notification: {
