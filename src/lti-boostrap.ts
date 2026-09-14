@@ -1,6 +1,7 @@
 import dotenv from "dotenv";
 import { Database, IdToken, Provider } from "ltijs";
 import express from "express";
+import { createServer } from "node:http";
 import { Request, Response } from "express";
 import { LtiToken } from "./common/types/lti.js";
 import { setupSwagger } from "./docs/swagger.js";
@@ -14,6 +15,7 @@ import { questionRouter } from "./routes/question.routes.js";
 import { submissionRouter } from "./routes/submission.routes.js";
 import { messageRouter } from "./routes/message.routes.js";
 import { notificationRouter } from "./routes/notification.routes.js";
+import { realtimeRouter } from "./routes/realtime.routes.js";
 import { userRouter } from "./routes/user.routes.js";
 import {
   LtiLaunchDataError,
@@ -24,6 +26,7 @@ import { gradingWorker } from "./workers/grading.worker.js";
 import { handleUploadErrors } from "./middleware/upload.js";
 import { notificationWorker } from "./workers/notification.worker.js";
 import { createMoodlePlatformConfig } from "./config/moodle-platform.config.js";
+import { evaluationRealtime } from "./realtime/evaluation-realtime.js";
 
 dotenv.config();
 
@@ -128,6 +131,7 @@ export const boostrapLti = async (db: Database): Promise<void> => {
   lti.app.use("/api", courseRouter);
   lti.app.use("/api", messageRouter);
   lti.app.use("/api", notificationRouter);
+  lti.app.use("/api", realtimeRouter);
   lti.app.use("/api", userRouter);
   lti.app.use("/api", questionRouter);
   lti.app.use("/api", submissionRouter);
@@ -220,15 +224,27 @@ export const boostrapLti = async (db: Database): Promise<void> => {
     }
   });
 
-  await lti.deploy({ port: process.env.PORT || 3001 });
+  await lti.deploy({ serverless: true, silent: true });
+  const port = Number(process.env.PORT || 3001);
+  const httpServer = createServer(lti.app);
+  evaluationRealtime.attach(httpServer);
+  await new Promise<void>((resolve, reject) => {
+    httpServer.once("error", reject);
+    httpServer.listen(port, () => {
+      httpServer.off("error", reject);
+      resolve();
+    });
+  });
   try {
     await registerMoodlePlatform();
   } catch (error) {
+    evaluationRealtime.close();
+    await new Promise<void>((resolve) => httpServer.close(() => resolve()));
     await lti.close();
     throw error;
   }
   console.log(
-    `🚀 LTI Tool Provider Engine live on port ${process.env.PORT || 3001}`,
+    `🚀 LTI Tool Provider Engine live on port ${port}`,
   );
 
   gradingWorker.start();
@@ -237,6 +253,8 @@ export const boostrapLti = async (db: Database): Promise<void> => {
   const shutdown = async (): Promise<void> => {
     await gradingWorker.stop();
     notificationWorker.stop();
+    evaluationRealtime.close();
+    await new Promise<void>((resolve) => httpServer.close(() => resolve()));
   };
 
   process.once("SIGINT", () => {
