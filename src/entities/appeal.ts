@@ -18,7 +18,7 @@ import { Student } from "./student.js";
 import { Submission } from "./submission.js";
 
 @Entity({ name: "appeals" })
-@Index("IDX_appeal_submission", ["submissionId"])
+@Index("UQ_appeal_submission", ["submissionId"], { unique: true })
 @Index("IDX_appeal_evaluation", ["evaluationId"])
 @Index("IDX_appeal_student", ["studentId"])
 export class Appeal {
@@ -30,6 +30,9 @@ export class Appeal {
 
   @Column("uuid", { name: "evaluation_id" })
   evaluationId!: string;
+
+  @Column("uuid", { name: "result_evaluation_id", nullable: true })
+  resultEvaluationId!: string | null;
 
   @Column("uuid", { name: "student_id" })
   studentId!: string;
@@ -55,6 +58,16 @@ export class Appeal {
   ])
   evaluation!: Relation<Evaluation>;
 
+  @ManyToOne(() => Evaluation, {
+    nullable: true,
+    onDelete: "RESTRICT",
+  })
+  @JoinColumn([
+    { name: "result_evaluation_id", referencedColumnName: "id" },
+    { name: "submission_id", referencedColumnName: "submissionId" },
+  ])
+  resultEvaluation!: Relation<Evaluation> | null;
+
   @ManyToOne(() => Student, (student) => student.appeals, {
     onDelete: "CASCADE",
   })
@@ -70,6 +83,9 @@ export class Appeal {
 
   @Column({ type: "text" })
   reason!: string;
+
+  @Column({ type: "varchar", length: 50, nullable: true })
+  category!: string | null;
 
   @Column({
     type: "enum",

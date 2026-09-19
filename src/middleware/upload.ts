@@ -34,6 +34,24 @@ export const uploadSingleDocument = multer({
   },
 });
 
+export const uploadSinglePdf = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: config.maxUploadBytes,
+    files: 1,
+  },
+  fileFilter: (_req, file, callback) => {
+    const mimeType = detectMimeType(file.originalname);
+    if (mimeType !== "application/pdf") {
+      callback(new Error("Only PDF evidence files are supported"));
+      return;
+    }
+
+    file.mimetype = mimeType;
+    callback(null, true);
+  },
+});
+
 export const handleUploadErrors: ErrorRequestHandler = (
   error,
   _req,
@@ -47,7 +65,8 @@ export const handleUploadErrors: ErrorRequestHandler = (
 
   if (
     error instanceof Error &&
-    error.message === "Only PDF, DOCX, and plain text uploads are supported"
+    (error.message === "Only PDF, DOCX, and plain text uploads are supported" ||
+      error.message === "Only PDF evidence files are supported")
   ) {
     res.status(400).json({ message: error.message });
     return;

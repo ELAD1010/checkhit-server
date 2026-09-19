@@ -422,19 +422,14 @@ export const openApiComponents = {
     },
     AppealFile: {
       type: "object",
+      required: ["id", "fileId", "name", "mimeType", "sizeBytes", "downloadUrl"],
       properties: {
-        appealId: { type: "string", format: "uuid" },
+        id: { type: "string", format: "uuid" },
         fileId: { type: "string", format: "uuid" },
-        file: {
-          type: "object",
-          properties: {
-            id: { type: "string", format: "uuid" },
-            originalName: { type: "string" },
-            mimeType: { type: "string" },
-            sizeBytes: { type: "integer" },
-            s3Key: { type: "string" },
-          },
-        },
+        name: { type: "string" },
+        mimeType: { type: "string", enum: ["application/pdf"] },
+        sizeBytes: { type: "integer" },
+        downloadUrl: { type: "string" },
       },
     },
     AppealCourse: {
@@ -496,9 +491,23 @@ export const openApiComponents = {
               id: { type: "string", format: "uuid" },
               submissionId: { type: "string", format: "uuid" },
               evaluationId: { type: "string", format: "uuid" },
+              resultEvaluationId: {
+                type: ["string", "null"],
+                format: "uuid",
+              },
               studentId: { type: "string", format: "uuid" },
               reviewerId: { type: ["string", "null"], format: "uuid" },
               reason: { type: "string" },
+              category: {
+                type: ["string", "null"],
+                enum: [
+                  "grading_error",
+                  "misunderstanding",
+                  "technical",
+                  "other",
+                  null,
+                ],
+              },
               status: {
                 type: "string",
                 enum: [
@@ -520,6 +529,10 @@ export const openApiComponents = {
                 },
               },
               evaluation: { $ref: "#/components/schemas/AppealEvaluation" },
+              resultEvaluation: {
+                type: ["object", "null"],
+                $ref: "#/components/schemas/AppealEvaluation",
+              },
               reviewer: {
                 type: ["object", "null"],
                 $ref: "#/components/schemas/Lecturer",
@@ -550,13 +563,25 @@ export const openApiComponents = {
                 enum: ["ACCEPTED", "REJECTED"],
               },
               resolution: { type: "string" },
-              reviewerId: {
-                type: "string",
-                format: "uuid",
-                description:
-                  "Optional when lecturer identity is derived from the LTI session.",
-              },
               newScore: { type: "number", minimum: 0 },
+            },
+          },
+          CreateAppealRequest: {
+            type: "object",
+            required: ["submissionId", "reason"],
+            properties: {
+              submissionId: { type: "string", format: "uuid" },
+              reason: { type: "string", minLength: 20, maxLength: 5000 },
+              category: {
+                type: "string",
+                enum: [
+                  "grading_error",
+                  "misunderstanding",
+                  "technical",
+                  "other",
+                ],
+              },
+              file: { type: "string", format: "binary" },
             },
           },
           Notification: {
