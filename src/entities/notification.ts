@@ -16,6 +16,9 @@ import { User } from "./user.js";
 @Index("IDX_notification_recipient", ["recipientId"])
 @Index("IDX_notification_recipient_unread", ["recipientId", "isRead"])
 @Index("IDX_notification_recipient_created", ["recipientId", "createdAt"])
+@Index("UQ_notification_recipient_event", ["recipientId", "eventKey"], {
+  unique: true,
+})
 export class Notification {
   @PrimaryGeneratedColumn("uuid", { name: "notification_id" })
   id!: string;
@@ -50,6 +53,9 @@ export class Notification {
 
   @Column({ type: "jsonb", nullable: true })
   metadata!: Record<string, unknown> | null;
+
+  @Column({ name: "event_key", type: "varchar", length: 500, nullable: true })
+  eventKey!: string | null;
 
   @Column({ name: "read_at", type: "timestamptz", nullable: true })
   readAt!: Date | null;

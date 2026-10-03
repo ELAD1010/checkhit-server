@@ -120,6 +120,13 @@ test("claim policy is idempotent for one lecturer and conflicts for competitors"
     ),
     "ALREADY_CLAIMED",
   );
+  assert.equal(
+    getAppealClaimAction(
+      { status: AppealStatus.UNDER_REVIEW, reviewerId: null },
+      "lecturer-a",
+    ),
+    "CLAIM",
+  );
   assert.throws(
     () =>
       getAppealClaimAction(

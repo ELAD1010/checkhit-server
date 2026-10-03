@@ -427,7 +427,14 @@ export const openApiComponents = {
         id: { type: "string", format: "uuid" },
         fileId: { type: "string", format: "uuid" },
         name: { type: "string" },
-        mimeType: { type: "string", enum: ["application/pdf"] },
+        mimeType: {
+          type: "string",
+          enum: [
+            "application/pdf",
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            "text/plain",
+          ],
+        },
         sizeBytes: { type: "integer" },
         downloadUrl: { type: "string" },
       },
@@ -519,6 +526,16 @@ export const openApiComponents = {
                 ],
               },
               resolution: { type: ["string", "null"] },
+              reviewSource: {
+                type: ["string", "null"],
+                enum: ["LECTURER", "AI", null],
+              },
+              aiRecommendation: { type: ["object", "null"] },
+              aiModel: { type: ["string", "null"] },
+              aiReviewedAt: {
+                type: ["string", "null"],
+                format: "date-time",
+              },
               resolvedAt: { type: ["string", "null"], format: "date-time" },
               submission: { $ref: "#/components/schemas/AppealSubmission" },
               student: {
@@ -584,6 +601,17 @@ export const openApiComponents = {
               file: { type: "string", format: "binary" },
             },
           },
+          AiAppealReviewRequest: {
+            type: "object",
+            properties: {
+              autoResolve: {
+                type: "boolean",
+                default: false,
+                description:
+                  "When false, store a recommendation for lecturer approval. When true, apply the AI decision and grade.",
+              },
+            },
+          },
           Notification: {
             type: "object",
             required: [
@@ -615,6 +643,10 @@ export const openApiComponents = {
               isRead: { type: "boolean" },
               link: { type: ["string", "null"] },
               metadata: { type: ["object", "null"] },
+              eventKey: {
+                type: ["string", "null"],
+                description: "Stable idempotency key for this recipient event",
+              },
               readAt: { type: ["string", "null"], format: "date-time" },
               createdAt: { type: "string", format: "date-time" },
               updatedAt: { type: "string", format: "date-time" },

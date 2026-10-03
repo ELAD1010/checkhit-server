@@ -8,21 +8,20 @@ import {
 import { AppDataSource } from "../database/data-source.js";
 import { AppealFile } from "../entities/appeal-file.js";
 import { Appeal } from "../entities/appeal.js";
-import { Assignment } from "../entities/assignment.js";
 import { CourseLecturer } from "../entities/course-lecturer.js";
 import {
+  AppealReviewSource,
   AppealStatus,
   EvaluationStatus,
-  NotificationCategory,
   SubmissionStatus,
 } from "../entities/enums.js";
 import { Evaluation } from "../entities/evaluation.js";
 import { FileAsset } from "../entities/file-asset.js";
 import { Lecturer } from "../entities/lecturer.js";
-import { Notification } from "../entities/notification.js";
 import { Student } from "../entities/student.js";
 import { Submission } from "../entities/submission.js";
 import { evaluationRealtime } from "../realtime/evaluation-realtime.js";
+import type { AppealAiRecommendation } from "../appeals/schemas.js";
 
 export const APPEAL_CATEGORIES = [
   "grading_error",
@@ -127,6 +126,12 @@ export const getAppealClaimAction = (
   ) {
     return "ALREADY_CLAIMED";
   }
+  if (
+    appeal.status === AppealStatus.UNDER_REVIEW &&
+    appeal.reviewerId === null
+  ) {
+    return "CLAIM";
+  }
   if (appeal.status !== AppealStatus.SUBMITTED) {
     throw new AppealConflictError("Only submitted appeals can be claimed");
   }
@@ -193,7 +198,7 @@ export interface CreateAppealInput {
   studentId: string;
   reason: string;
   category?: AppealCategory | null;
-  fileId?: string;
+  fileIds?: string[];
 }
 
 export interface ResolveAppealInput {
@@ -249,13 +254,6 @@ export class AppealRepository {
       if (!submission) {
         throw new AppealValidationError("Submission was not found");
       }
-      const assignment = await manager.getRepository(Assignment).findOne({
-        where: { id: submission.assignmentId },
-        relations: { course: { lecturers: true } },
-      });
-      if (!assignment) {
-        throw new AppealValidationError("Submission assignment was not found");
-      }
       const evaluations = await manager.getRepository(Evaluation).find({
         where: { submissionId: submission.id },
       });
@@ -269,11 +267,21 @@ export class AppealRepository {
         evaluations,
       });
 
-      if (
-        input.fileId &&
-        !(await manager.getRepository(FileAsset).existsBy({ id: input.fileId }))
-      ) {
-        throw new AppealValidationError("Evidence file was not found");
+      const fileIds = [...new Set(input.fileIds ?? [])];
+      if (fileIds.length > 5) {
+        throw new AppealValidationError(
+          "An appeal can contain at most 5 files",
+        );
+      }
+      if (fileIds.length > 0) {
+        const files = await manager.getRepository(FileAsset).findBy({
+          id: In(fileIds),
+        });
+        if (files.length !== fileIds.length) {
+          throw new AppealValidationError(
+            "One or more evidence files were not found",
+          );
+        }
       }
 
       const appeal = await manager.getRepository(Appeal).save(
@@ -287,42 +295,24 @@ export class AppealRepository {
           category: input.category ?? null,
           status: AppealStatus.SUBMITTED,
           resolution: null,
+          reviewSource: null,
+          aiRecommendation: null,
+          aiModel: null,
+          aiReviewedAt: null,
           resolvedAt: null,
         }),
       );
 
-      if (input.fileId) {
+      if (fileIds.length > 0) {
         await manager.getRepository(AppealFile).save(
-          manager.getRepository(AppealFile).create({
-            appealId: appeal.id,
-            fileId: input.fileId,
-          }),
+          fileIds.map((fileId) =>
+            manager.getRepository(AppealFile).create({
+              appealId: appeal.id,
+              fileId,
+            }),
+          ),
         );
       }
-
-      const notificationMetadata = {
-        appealId: appeal.id,
-        assignmentId: submission.assignmentId,
-        courseId: assignment.courseId,
-        studentId: input.studentId,
-        status: appeal.status,
-      };
-      await this.createNotifications(manager, [input.studentId], {
-        title: "Appeal received",
-        body: `Your appeal for ${assignment.name} was received.`,
-        link: `/student/assignments/${submission.assignmentId}`,
-        metadata: notificationMetadata,
-      });
-      await this.createNotifications(
-        manager,
-        assignment.course.lecturers.map((item) => item.lecturerId),
-        {
-          title: "New grade appeal",
-          body: `A student submitted an appeal for ${assignment.name}.`,
-          link: `/lecturer/appeals/${appeal.id}`,
-          metadata: notificationMetadata,
-        },
-      );
 
       return manager.getRepository(Appeal).findOneOrFail({
         where: { id: appeal.id },
@@ -357,20 +347,105 @@ export class AppealRepository {
       appeal.status = AppealStatus.UNDER_REVIEW;
       appeal.reviewerId = lecturerId;
       await manager.getRepository(Appeal).save(appeal);
-      await this.createNotifications(manager, [appeal.studentId], {
-        title: "Appeal under review",
-        body: `Your appeal for ${submission.assignment.name} is being reviewed.`,
-        link: `/student/assignments/${submission.assignmentId}`,
-        metadata: {
-          appealId: appeal.id,
-          assignmentId: submission.assignmentId,
-          courseId: submission.assignment.courseId,
-          status: appeal.status,
-          reviewerId: lecturerId,
-        },
-      });
     });
 
+    return (await this.findAppealById(appealId))!;
+  }
+
+  async cancelAppeal(appealId: string, studentId: string): Promise<Appeal> {
+    await this.dataSource.transaction(async (manager) => {
+      const appeal = await manager.getRepository(Appeal).findOne({
+        where: { id: appealId },
+        lock: { mode: "pessimistic_write" },
+      });
+      if (!appeal) throw new AppealNotFoundError(appealId);
+      if (appeal.studentId !== studentId) {
+        throw new AppealForbiddenError(
+          "Students may only cancel their own appeals",
+        );
+      }
+      if (appeal.status !== AppealStatus.SUBMITTED) {
+        throw new AppealConflictError(
+          "An appeal can only be cancelled before review begins",
+        );
+      }
+      appeal.status = AppealStatus.CANCELLED;
+      appeal.resolvedAt = new Date();
+      await manager.getRepository(Appeal).save(appeal);
+    });
+    return (await this.findAppealById(appealId))!;
+  }
+
+  async addEvidence(
+    appealId: string,
+    studentId: string,
+    fileIds: string[],
+  ): Promise<Appeal> {
+    await this.dataSource.transaction(async (manager) => {
+      const appeal = await manager.getRepository(Appeal).findOne({
+        where: { id: appealId },
+        relations: { files: true },
+        lock: { mode: "pessimistic_write" },
+      });
+      if (!appeal) throw new AppealNotFoundError(appealId);
+      if (appeal.studentId !== studentId) throw new AppealForbiddenError();
+      if (appeal.status !== AppealStatus.SUBMITTED) {
+        throw new AppealConflictError(
+          "Evidence cannot be changed after review begins",
+        );
+      }
+      const unique = [...new Set(fileIds)].filter(
+        (id) => !appeal.files.some((link) => link.fileId === id),
+      );
+      if (appeal.files.length + unique.length > 5) {
+        throw new AppealValidationError(
+          "An appeal can contain at most 5 files",
+        );
+      }
+      const files = await manager.getRepository(FileAsset).findBy({
+        id: In(unique),
+      });
+      if (files.length !== unique.length) {
+        throw new AppealValidationError(
+          "One or more evidence files were not found",
+        );
+      }
+      await manager.getRepository(AppealFile).save(
+        unique.map((fileId) =>
+          manager.getRepository(AppealFile).create({ appealId, fileId }),
+        ),
+      );
+    });
+    return (await this.findAppealById(appealId))!;
+  }
+
+  async removeEvidence(
+    appealId: string,
+    studentId: string,
+    fileId: string,
+  ): Promise<Appeal> {
+    await this.dataSource.transaction(async (manager) => {
+      const appeal = await manager.getRepository(Appeal).findOne({
+        where: { id: appealId },
+        lock: { mode: "pessimistic_write" },
+      });
+      if (!appeal) throw new AppealNotFoundError(appealId);
+      if (appeal.studentId !== studentId) throw new AppealForbiddenError();
+      if (appeal.status !== AppealStatus.SUBMITTED) {
+        throw new AppealConflictError(
+          "Evidence cannot be changed after review begins",
+        );
+      }
+      const result = await manager.getRepository(AppealFile).delete({
+        appealId,
+        fileId,
+      });
+      if (!result.affected) {
+        throw new AppealValidationError(
+          "Evidence file was not attached to this appeal",
+        );
+      }
+    });
     return (await this.findAppealById(appealId))!;
   }
 
@@ -464,25 +539,9 @@ export class AppealRepository {
         appeal.status = input.status;
         appeal.resolution = resolution;
         appeal.resultEvaluationId = resultEvaluationId;
+        appeal.reviewSource = AppealReviewSource.LECTURER;
         appeal.resolvedAt = new Date();
         await appealRepo.save(appeal);
-
-        const accepted = input.status === AppealStatus.ACCEPTED;
-        await this.createNotifications(manager, [appeal.studentId], {
-          title: accepted ? "Appeal accepted" : "Appeal rejected",
-          body: accepted
-            ? `Your appeal for ${submission.assignment.name} was accepted. Your revised score is ${input.newScore}/${originalEvaluation.maxScore}.`
-            : `Your appeal for ${submission.assignment.name} was rejected. The original grade remains unchanged.`,
-          link: `/student/assignments/${submission.assignmentId}`,
-          metadata: {
-            appealId: appeal.id,
-            assignmentId: submission.assignmentId,
-            courseId: submission.assignment.courseId,
-            status: appeal.status,
-            resolution: appeal.resolution,
-            newScore: accepted ? input.newScore : undefined,
-          },
-        });
 
         return appeal.id;
       },
@@ -637,6 +696,142 @@ export class AppealRepository {
     });
   }
 
+  async saveAiRecommendation(
+    appealId: string,
+    recommendation: AppealAiRecommendation,
+    model: string,
+  ): Promise<Appeal> {
+    await this.dataSource.transaction(async (manager) => {
+      const appeal = await manager.getRepository(Appeal).findOne({
+        where: { id: appealId },
+        relations: { evaluation: true },
+        lock: { mode: "pessimistic_write" },
+      });
+      if (!appeal) throw new AppealNotFoundError(appealId);
+      if (
+        appeal.status !== AppealStatus.SUBMITTED &&
+        appeal.status !== AppealStatus.UNDER_REVIEW
+      ) {
+        throw new AppealConflictError("This appeal has already been resolved");
+      }
+      if (recommendation.recommendedScore > appeal.evaluation.maxScore) {
+        throw new AppealValidationError(
+          `AI recommended score cannot exceed ${appeal.evaluation.maxScore}`,
+        );
+      }
+      appeal.aiRecommendation = recommendation;
+      appeal.aiModel = model;
+      appeal.aiReviewedAt = new Date();
+      appeal.status = AppealStatus.UNDER_REVIEW;
+      await manager.getRepository(Appeal).save(appeal);
+    });
+    return (await this.findAppealById(appealId))!;
+  }
+
+  async resolveAppealByAi(
+    appealId: string,
+    recommendation: AppealAiRecommendation,
+    model: string,
+  ): Promise<Appeal> {
+    let updatedEvaluationId: string | undefined;
+    await this.dataSource.transaction(async (manager) => {
+      const appeal = await manager.getRepository(Appeal).findOne({
+        where: { id: appealId },
+        relations: {
+          evaluation: true,
+          resultEvaluation: true,
+          submission: { assignment: true },
+        },
+        lock: { mode: "pessimistic_write" },
+      });
+      if (!appeal) throw new AppealNotFoundError(appealId);
+      if (
+        appeal.status !== AppealStatus.SUBMITTED &&
+        appeal.status !== AppealStatus.UNDER_REVIEW
+      ) {
+        throw new AppealConflictError("This appeal has already been resolved");
+      }
+      if (recommendation.recommendedScore > appeal.evaluation.maxScore) {
+        throw new AppealValidationError(
+          `AI recommended score cannot exceed ${appeal.evaluation.maxScore}`,
+        );
+      }
+
+      let resultEvaluationId = appeal.resultEvaluationId;
+      if (recommendation.decision === AppealStatus.ACCEPTED) {
+        await manager
+          .getRepository(Evaluation)
+          .createQueryBuilder()
+          .update(Evaluation)
+          .set({ isFinal: false })
+          .where("submission_id = :submissionId", {
+            submissionId: appeal.submissionId,
+          })
+          .andWhere("is_final = true")
+          .execute();
+        const now = new Date();
+        const evaluation = await manager.getRepository(Evaluation).save(
+          manager.getRepository(Evaluation).create({
+            submissionId: appeal.submissionId,
+            questionSetId: appeal.evaluation.questionSetId,
+            score: recommendation.recommendedScore,
+            maxScore: appeal.evaluation.maxScore,
+            feedback: recommendation.resolution,
+            selectionSummary: "AI appeal review",
+            model,
+            promptVersion: "appeal-v1",
+            confidence: recommendation.confidence,
+            status: EvaluationStatus.COMPLETED,
+            isFinal: true,
+            attemptCount: 0,
+            maxAttempts: appeal.evaluation.maxAttempts,
+            nextAttemptAt: null,
+            startedAt: now,
+            completedAt: now,
+            errorMessage: null,
+          }),
+        );
+        resultEvaluationId = evaluation.id;
+        updatedEvaluationId = evaluation.id;
+      }
+
+      appeal.status = recommendation.decision as
+        | AppealStatus.ACCEPTED
+        | AppealStatus.REJECTED;
+      appeal.resultEvaluationId = resultEvaluationId;
+      appeal.resolution = recommendation.resolution;
+      appeal.reviewSource = AppealReviewSource.AI;
+      appeal.aiRecommendation = recommendation;
+      appeal.aiModel = model;
+      appeal.aiReviewedAt = new Date();
+      appeal.resolvedAt = new Date();
+      await manager.getRepository(Appeal).save(appeal);
+    });
+    if (updatedEvaluationId) {
+      await evaluationRealtime.publishEvaluation(updatedEvaluationId);
+    }
+    return (await this.findAppealById(appealId))!;
+  }
+
+  async assertLecturerCanReview(
+    appealId: string,
+    lecturerId: string,
+  ): Promise<Appeal> {
+    const appeal = await this.findAppealById(appealId);
+    if (!appeal) throw new AppealNotFoundError(appealId);
+    await this.assertLecturerForCourse(
+      lecturerId,
+      appeal.submission.assignment.courseId,
+      this.dataSource.manager,
+    );
+    if (appeal.reviewerId && appeal.reviewerId !== lecturerId) {
+      throw new AppealConflictError(
+        "This appeal is assigned to another lecturer",
+      );
+    }
+    return appeal;
+  }
+
   async isLecturerForCourse(
     lecturerId: string,
     courseId: string,
@@ -665,34 +860,5 @@ export class AppealRepository {
         "Only lecturers assigned to this course may review the appeal",
       );
     }
-  }
-
-  private async createNotifications(
-    manager: EntityManager,
-    recipientIds: string[],
-    data: {
-      title: string;
-      body: string;
-      link: string;
-      metadata: Record<string, unknown>;
-    },
-  ): Promise<void> {
-    const recipients = [...new Set(recipientIds)];
-    if (recipients.length === 0) return;
-    const repository = manager.getRepository(Notification);
-    await repository.save(
-      recipients.map((recipientId) =>
-        repository.create({
-          recipientId,
-          title: data.title,
-          body: data.body,
-          category: NotificationCategory.APPEAL,
-          isRead: false,
-          link: data.link,
-          metadata: data.metadata,
-          readAt: null,
-        }),
-      ),
-    );
   }
 }

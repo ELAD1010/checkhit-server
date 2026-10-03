@@ -9,6 +9,10 @@ import {
   StudentNotEnrolledInCourseError,
 } from "../repositories/assignment.repository.js";
 import { getDatabaseErrorCode, isUuid } from "./user-controller.utils.js";
+import { notificationService } from "../services/notification.service.js";
+import { AppDataSource } from "../database/data-source.js";
+import { Assignment } from "../entities/assignment.js";
+import { MembershipStatus, NotificationCategory } from "../entities/enums.js";
 
 const assignmentRepository = new AssignmentRepository();
 
@@ -112,6 +116,11 @@ export const createAssignment = async (
 
   try {
     const assignment = await assignmentRepository.createAssignment(input);
+    if (assignment.status === AssignmentStatus.PUBLISHED) {
+      await notificationService.safely("assignment published", () =>
+        notificationService.notifyAssignmentPublished(assignment.id),
+      );
+    }
     res.status(201).json(assignment);
   } catch (error) {
     if (error instanceof AssignmentCourseNotFoundError) {
@@ -364,11 +373,33 @@ export const deleteAssignment = async (
   }
 
   try {
+    const assignment = await AppDataSource.getRepository(Assignment).findOne({
+      where: { id: assignmentId },
+      relations: { course: { enrollments: true } },
+    });
     const deleted = await assignmentRepository.deleteAssignment(assignmentId);
 
     if (!deleted) {
       res.status(404).json({ message: "Assignment not found" });
       return;
+    }
+
+    if (assignment) {
+      await notificationService.safely("assignment removed", () =>
+        notificationService.send(
+          assignment.course.enrollments
+            .filter((item) => item.status === MembershipStatus.ACTIVE)
+            .map((item) => item.studentId),
+          {
+            title: "Assignment removed",
+            body: `${assignment.name} is no longer available.`,
+            category: NotificationCategory.WARNING,
+            link: null,
+            eventKey: `ASSIGNMENT_REMOVED:${assignment.id}`,
+            metadata: { assignmentId: assignment.id, courseId: assignment.courseId },
+          },
+        ),
+      );
     }
 
     res.status(204).send();

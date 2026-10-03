@@ -97,6 +97,13 @@ test("GradingService grades with fake provider and persists aggregated score", a
       },
     } as never,
     fakeProvider,
+    {
+      async safely(_label, operation) {
+        await operation();
+      },
+      async notifyEvaluationCompleted() {},
+      async notifyEvaluationFailed() {},
+    },
   );
 
   await service.processEvaluation({

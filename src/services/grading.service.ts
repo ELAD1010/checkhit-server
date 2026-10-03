@@ -23,6 +23,10 @@ import {
   validateExtractedQuestions,
   validateGradingAgainstQuestions,
 } from "../grading/schemas.js";
+import {
+  notificationService,
+  type NotificationService,
+} from "./notification.service.js";
 
 export class GradingService {
   constructor(
@@ -31,6 +35,7 @@ export class GradingService {
     private readonly questionImportRepository = new QuestionImportRepository(),
     private readonly fileStorage: FileStorage = new LocalFileStorage(),
     private readonly aiProvider: GradingAiProvider | null = null,
+    private readonly notifications: Pick<NotificationService, "safely" | "notifyEvaluationCompleted" | "notifyEvaluationFailed"> = notificationService,
   ) {}
 
   private getProvider(): GradingAiProvider {
@@ -135,6 +140,9 @@ export class GradingService {
           validationErrors: null,
         },
       });
+      await this.notifications.safely("grade ready", () =>
+        this.notifications.notifyEvaluationCompleted(fullEvaluation.id),
+      );
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "Unknown grading failure";
@@ -150,6 +158,11 @@ export class GradingService {
         message,
         validationErrors,
       );
+      if (evaluation.attemptCount >= (evaluation.maxAttempts || config.workerMaxAttempts)) {
+        await this.notifications.safely("grading failed", () =>
+          this.notifications.notifyEvaluationFailed(evaluation.id),
+        );
+      }
       throw error;
     }
   }

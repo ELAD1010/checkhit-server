@@ -1,6 +1,13 @@
 export {
   AppealRepository,
+  AppealConflictError,
+  AppealForbiddenError,
+  AppealLecturerNotFoundError,
+  AppealNotFoundError,
   AppealStudentNotFoundError,
+  AppealValidationError,
+  type CreateAppealInput,
+  type ResolveAppealInput,
 } from "./appeal.repository.js";
 export {
   AssignmentCourseNotFoundError,

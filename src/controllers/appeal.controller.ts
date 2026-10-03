@@ -15,6 +15,8 @@ import {
   type AppealCategory,
 } from "../repositories/appeal.repository.js";
 import { FileAssetRepository } from "../repositories/file-asset.repository.js";
+import { AppealAiService } from "../services/appeal-ai.service.js";
+import { notificationService } from "../services/notification.service.js";
 import { LocalFileStorage, type FileStorage } from "../storage/local-file-storage.js";
 import {
   assertFileContentMatchesMime,
@@ -24,6 +26,7 @@ import {
 import { getDatabaseErrorCode, isUuid } from "./user-controller.utils.js";
 
 const appealRepository = new AppealRepository();
+const appealAiService = new AppealAiService();
 const fileAssetRepository = new FileAssetRepository();
 const fileStorage: FileStorage = new LocalFileStorage();
 
@@ -74,6 +77,54 @@ const canReadAppeal = async (
   return appealRepository.isLecturerForCourse(
     req.auth.userId,
     appeal.submission.assignment.courseId,
+  );
+};
+
+const storeEvidenceFiles = async (
+  files: UploadedFile[] | undefined,
+): Promise<Array<{ id: string; objectKey: string }>> => {
+  const storedAssets: Array<{ id: string; objectKey: string }> = [];
+  try {
+    for (const file of files ?? []) {
+      const mimeType = detectMimeType(file.originalname);
+      if (!mimeType) {
+        throw new UploadValidationError("Unsupported evidence file type");
+      }
+      assertFileContentMatchesMime(file.buffer, mimeType);
+      const stored = await fileStorage.store({
+        buffer: file.buffer,
+        originalName: file.originalname,
+        mimeType,
+        prefix: "appeal-evidence",
+      });
+      try {
+        const asset = await fileAssetRepository.createFromStoredFile(stored);
+        storedAssets.push({ id: asset.id, objectKey: asset.objectKey });
+      } catch (error) {
+        await fileStorage.delete(stored.objectKey).catch(() => undefined);
+        throw error;
+      }
+    }
+    return storedAssets;
+  } catch (error) {
+    await Promise.all(
+      storedAssets.map(async (asset) => {
+        await fileAssetRepository.deleteById(asset.id).catch(() => undefined);
+        await fileStorage.delete(asset.objectKey).catch(() => undefined);
+      }),
+    );
+    throw error;
+  }
+};
+
+const cleanupAssets = async (
+  assets: Array<{ id: string; objectKey: string }>,
+): Promise<void> => {
+  await Promise.all(
+    assets.map(async (asset) => {
+      await fileAssetRepository.deleteById(asset.id).catch(() => undefined);
+      await fileStorage.delete(asset.objectKey).catch(() => undefined);
+    }),
   );
 };
 
@@ -135,9 +186,12 @@ export const createAppeal = async (
       studentId: req.auth.userId,
       reason,
       category: category as AppealCategory | undefined,
-      fileId: stagedAsset?.id,
+      fileIds: stagedAsset ? [stagedAsset.id] : [],
     });
     stagedAsset = undefined;
+    await notificationService.safely("appeal submitted", () =>
+      notificationService.notifyAppeal(appeal.id),
+    );
     res.status(201).json(serializeAppeal(appeal));
   } catch (error) {
     if (stagedAsset) {
@@ -275,11 +329,156 @@ export const claimAppeal = async (
     return;
   }
   try {
-    res.json(serializeAppeal(await appealRepository.claimAppeal(appealId, req.auth.userId)));
+    const appeal = await appealRepository.claimAppeal(
+      appealId,
+      req.auth.userId,
+    );
+    await notificationService.safely("appeal claimed", () =>
+      notificationService.notifyAppeal(appeal.id),
+    );
+    res.json(serializeAppeal(appeal));
   } catch (error) {
     if (!sendAppealError(error, res)) {
       console.error("Failed to claim appeal:", error);
       res.status(500).json({ message: "Failed to claim appeal" });
+    }
+  }
+};
+
+export const cancelAppeal = async (
+  req: AuthenticatedRequest,
+  res: Response,
+): Promise<void> => {
+  const appealId =
+    typeof req.params.appealId === "string" ? req.params.appealId : "";
+  if (!req.auth || !isUuid(appealId)) {
+    res.status(req.auth ? 400 : 401).json({
+      message: req.auth ? "A valid appeal ID is required" : "Missing LTI session",
+    });
+    return;
+  }
+  try {
+    const appeal = await appealRepository.cancelAppeal(
+      appealId,
+      req.auth.userId,
+    );
+    await notificationService.safely("appeal cancelled", () =>
+      notificationService.notifyAppeal(appeal.id),
+    );
+    res.json(serializeAppeal(appeal));
+  } catch (error) {
+    if (!sendAppealError(error, res)) {
+      console.error("Failed to cancel appeal:", error);
+      res.status(500).json({ message: "Failed to cancel appeal" });
+    }
+  }
+};
+
+export const addAppealEvidence = async (
+  req: AuthenticatedRequest,
+  res: Response,
+): Promise<void> => {
+  const appealId =
+    typeof req.params.appealId === "string" ? req.params.appealId : "";
+  if (!req.auth || !isUuid(appealId)) {
+    res.status(req.auth ? 400 : 401).json({
+      message: req.auth ? "A valid appeal ID is required" : "Missing LTI session",
+    });
+    return;
+  }
+
+  let staged: Array<{ id: string; objectKey: string }> = [];
+  try {
+    staged = await storeEvidenceFiles(
+      (req as AuthenticatedRequest & { files?: UploadedFile[] }).files,
+    );
+    if (staged.length === 0) {
+      throw new AppealValidationError(
+        "At least one evidence file is required",
+      );
+    }
+    const appeal = await appealRepository.addEvidence(
+      appealId,
+      req.auth.userId,
+      staged.map((asset) => asset.id),
+    );
+    staged = [];
+    res.json(serializeAppeal(appeal));
+  } catch (error) {
+    await cleanupAssets(staged);
+    if (!sendAppealError(error, res)) {
+      console.error("Failed to add appeal evidence:", error);
+      res.status(500).json({ message: "Failed to add appeal evidence" });
+    }
+  }
+};
+
+export const removeAppealEvidence = async (
+  req: AuthenticatedRequest,
+  res: Response,
+): Promise<void> => {
+  const appealId =
+    typeof req.params.appealId === "string" ? req.params.appealId : "";
+  const fileId =
+    typeof req.params.fileId === "string" ? req.params.fileId : "";
+  if (!req.auth || !isUuid(appealId) || !isUuid(fileId)) {
+    res.status(req.auth ? 400 : 401).json({
+      message: req.auth
+        ? "Valid appeal and file IDs are required"
+        : "Missing LTI session",
+    });
+    return;
+  }
+  try {
+    const appeal = await appealRepository.removeEvidence(
+      appealId,
+      req.auth.userId,
+      fileId,
+    );
+    res.json(serializeAppeal(appeal));
+  } catch (error) {
+    if (!sendAppealError(error, res)) {
+      console.error("Failed to remove appeal evidence:", error);
+      res.status(500).json({ message: "Failed to remove appeal evidence" });
+    }
+  }
+};
+
+export const reviewAppealWithAi = async (
+  req: AuthenticatedRequest,
+  res: Response,
+): Promise<void> => {
+  const appealId =
+    typeof req.params.appealId === "string" ? req.params.appealId : "";
+  if (!req.auth || !isUuid(appealId)) {
+    res.status(req.auth ? 400 : 401).json({
+      message: req.auth ? "A valid appeal ID is required" : "Missing LTI session",
+    });
+    return;
+  }
+  const autoResolve =
+    req.body?.autoResolve === true || req.body?.autoResolve === "true";
+  try {
+    const appeal = await appealAiService.review({
+      appealId,
+      lecturerId: req.auth.userId,
+      autoResolve,
+    });
+    await notificationService.safely("AI appeal review", () =>
+      notificationService.notifyAppeal(appeal.id),
+    );
+    if (autoResolve && appeal.resultEvaluationId) {
+      await notificationService.safely("AI appeal grade", () =>
+        notificationService.notifyEvaluationCompleted(
+          appeal.resultEvaluationId!,
+        ),
+      );
+    }
+    res.json(serializeAppeal(appeal));
+  } catch (error) {
+    if (!sendAppealError(error, res)) {
+      console.error("Failed to review appeal with AI:", error);
+      res.status(502).json({ message: "AI appeal review failed" });
     }
   }
 };
@@ -318,6 +517,16 @@ export const resolveAppeal = async (
       reviewerId: req.auth.userId,
       newScore,
     });
+    await notificationService.safely("appeal resolved", () =>
+      notificationService.notifyAppeal(appeal.id),
+    );
+    if (appeal.resultEvaluationId) {
+      await notificationService.safely("appeal grade", () =>
+        notificationService.notifyEvaluationCompleted(
+          appeal.resultEvaluationId!,
+        ),
+      );
+    }
     res.json(serializeAppeal(appeal));
   } catch (error) {
     if (!sendAppealError(error, res)) {

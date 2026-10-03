@@ -1,5 +1,7 @@
 import { Router } from "express";
 import {
+  addAppealEvidence,
+  cancelAppeal,
   claimAppeal,
   createAppeal,
   downloadAppealEvidence,
@@ -7,6 +9,8 @@ import {
   getLecturerAppeals,
   getLecturerAppealsStats,
   getStudentAppeals,
+  removeAppealEvidence,
+  reviewAppealWithAi,
   resolveAppeal,
 } from "../controllers/appeal.controller.js";
 import {
@@ -14,7 +18,10 @@ import {
   requireLtiAuth,
   requireStudent,
 } from "../middleware/lti-auth.js";
-import { uploadSinglePdf } from "../middleware/upload.js";
+import {
+  uploadSingleDocument,
+  uploadSinglePdf,
+} from "../middleware/upload.js";
 
 export const appealRouter = Router();
 
@@ -141,6 +148,76 @@ appealRouter.patch(
 
 /**
  * @openapi
+ * /appeals/{appealId}/cancel:
+ *   patch:
+ *     tags: [Appeals]
+ *     summary: Cancel the authenticated student's unreviewed appeal
+ *     responses:
+ *       200:
+ *         description: Appeal cancelled
+ *       409:
+ *         description: Review has already started
+ */
+appealRouter.patch(
+  "/appeals/:appealId/cancel",
+  requireLtiAuth,
+  requireStudent,
+  cancelAppeal,
+);
+
+/**
+ * @openapi
+ * /appeals/{appealId}/evidence:
+ *   post:
+ *     tags: [Appeals]
+ *     summary: Add evidence to the authenticated student's unreviewed appeal
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             required: [files]
+ *             properties:
+ *               files:
+ *                 type: array
+ *                 maxItems: 5
+ *                 items: { type: string, format: binary }
+ *     responses:
+ *       200:
+ *         description: Evidence added
+ *       409:
+ *         description: Review has already started
+ */
+appealRouter.post(
+  "/appeals/:appealId/evidence",
+  requireLtiAuth,
+  requireStudent,
+  uploadSingleDocument.array("files", 5),
+  addAppealEvidence,
+);
+
+/**
+ * @openapi
+ * /appeals/{appealId}/evidence/{fileId}:
+ *   delete:
+ *     tags: [Appeals]
+ *     summary: Remove evidence from the authenticated student's unreviewed appeal
+ *     responses:
+ *       200:
+ *         description: Evidence removed
+ *       409:
+ *         description: Review has already started
+ */
+appealRouter.delete(
+  "/appeals/:appealId/evidence/:fileId",
+  requireLtiAuth,
+  requireStudent,
+  removeAppealEvidence,
+);
+
+/**
+ * @openapi
  * /appeals/{appealId}/evidence/{fileId}:
  *   get:
  *     tags: [Appeals]
@@ -157,6 +234,29 @@ appealRouter.get(
   "/appeals/:appealId/evidence/:fileId",
   requireLtiAuth,
   downloadAppealEvidence,
+);
+
+/**
+ * @openapi
+ * /appeals/{appealId}/ai-review:
+ *   post:
+ *     tags: [Appeals]
+ *     summary: Generate or apply an AI appeal recommendation
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema: { $ref: '#/components/schemas/AiAppealReviewRequest' }
+ *     responses:
+ *       200:
+ *         description: AI review completed
+ *       502:
+ *         description: AI review failed
+ */
+appealRouter.post(
+  "/appeals/:appealId/ai-review",
+  requireLtiAuth,
+  requireLecturer,
+  reviewAppealWithAi,
 );
 
 /**
