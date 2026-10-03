@@ -53,6 +53,11 @@ export enum AppealStatus {
   CANCELLED = "CANCELLED",
 }
 
+export enum AppealReviewSource {
+  LECTURER = "LECTURER",
+  AI = "AI",
+}
+
 export enum NotificationCategory {
   ASSIGNMENT = "ASSIGNMENT",
   GRADE = "GRADE",

@@ -8,6 +8,7 @@ import {
   MessageUserNotFoundError,
 } from "../repositories/message.repository.js";
 import { isUuid } from "./user-controller.utils.js";
+import { notificationService } from "../services/notification.service.js";
 
 const messageRepository = new MessageRepository();
 
@@ -258,6 +259,10 @@ export const createMessage = async (
       isPriority: Boolean(isPriority),
     });
 
+    await notificationService.safely("message", () =>
+      notificationService.notifyMessage(created.id),
+    );
+
     res.status(201).json(created);
   } catch (error) {
     if (
@@ -306,6 +311,10 @@ export const createReply = async (
       senderId,
       content: content.trim(),
     });
+
+    await notificationService.safely("message reply", () =>
+      notificationService.notifyMessage(reply.id),
+    );
 
     res.status(201).json({
       id: reply.id,

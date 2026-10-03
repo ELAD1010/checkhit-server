@@ -5,8 +5,46 @@ import {
   NotificationUserNotFoundError,
 } from "../repositories/notification.repository.js";
 import { isUuid } from "./user-controller.utils.js";
+import { notificationLiveService } from "../services/notification-live.service.js";
 
 const notificationRepository = new NotificationRepository();
+
+export const streamUserNotifications = async (
+  req: Request,
+  res: Response,
+): Promise<void> => {
+  const userId =
+    typeof req.params.userId === "string" ? req.params.userId : undefined;
+  if (!userId || !isUuid(userId)) {
+    res.status(400).json({ message: "A valid user ID is required" });
+    return;
+  }
+
+  try {
+    await notificationRepository.countUnread(userId);
+  } catch (error) {
+    if (error instanceof NotificationUserNotFoundError) {
+      res.status(404).json({ message: error.message });
+      return;
+    }
+    throw error;
+  }
+
+  res.status(200);
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache, no-transform");
+  res.setHeader("Connection", "keep-alive");
+  res.flushHeaders();
+  res.write("event: connected\ndata: {}\n\n");
+
+  const unsubscribe = notificationLiveService.subscribe(userId, res);
+  const heartbeat = setInterval(() => res.write(": heartbeat\n\n"), 25_000);
+  heartbeat.unref?.();
+  req.on("close", () => {
+    clearInterval(heartbeat);
+    unsubscribe();
+  });
+};
 
 export const getUserNotifications = async (
   req: Request,
@@ -88,6 +126,10 @@ export const markNotificationAsRead = async (
 
   try {
     const notification = await notificationRepository.markAsRead(id);
+    notificationLiveService.publishEvent(notification.recipientId, "notification-read", {
+      notificationId: notification.id,
+      readAt: notification.readAt,
+    });
     res.json(notification);
   } catch (error) {
     if (error instanceof NotificationNotFoundError) {
@@ -114,6 +156,10 @@ export const markAllNotificationsAsRead = async (
 
   try {
     const updatedCount = await notificationRepository.markAllAsRead(userId);
+    notificationLiveService.publishEvent(userId, "notifications-read-all", {
+      updatedCount,
+      readAt: new Date(),
+    });
     res.json({ success: true, updatedCount });
   } catch (error) {
     if (error instanceof NotificationUserNotFoundError) {

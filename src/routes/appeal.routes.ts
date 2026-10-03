@@ -1,13 +1,60 @@
 import { Router } from "express";
 import {
+  addAppealEvidence,
+  cancelAppeal,
+  claimAppeal,
+  createAppeal,
+  downloadAppealEvidence,
   getAppealById,
   getLecturerAppeals,
   getLecturerAppealsStats,
   getStudentAppeals,
   resolveAppeal,
+  removeAppealEvidence,
+  reviewAppealWithAi,
 } from "../controllers/appeal.controller.js";
+import { uploadSingleDocument } from "../middleware/upload.js";
+import { optionalLtiAuth } from "../middleware/lti-auth.js";
 
 export const appealRouter = Router();
+appealRouter.use(optionalLtiAuth);
+
+/**
+ * @openapi
+ * /appeals:
+ *   post:
+ *     tags: [Appeals]
+ *     summary: Submit a student appeal for a completed evaluation
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/CreateAppealRequest'
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             required: [submissionId, reason]
+ *             properties:
+ *               submissionId: { type: string, format: uuid }
+ *               studentId: { type: string, format: uuid }
+ *               reason: { type: string, minLength: 20 }
+ *               category: { type: string }
+ *               fileIds: { type: string, description: JSON array of existing file UUIDs }
+ *               files:
+ *                 type: array
+ *                 maxItems: 5
+ *                 items: { type: string, format: binary }
+ *     responses:
+ *       201: { description: Appeal created }
+ *       400: { description: Invalid or ungraded submission }
+ *       409: { description: Active appeal already exists }
+ */
+appealRouter.post(
+  "/appeals",
+  uploadSingleDocument.array("files", 5),
+  createAppeal,
+);
 
 /**
  * @openapi
@@ -203,3 +250,104 @@ appealRouter.get("/lecturers/:lecturerId/appeals/stats", getLecturerAppealsStats
 appealRouter.get("/appeals/:appealId", getAppealById);
 appealRouter.patch("/appeals/:appealId", resolveAppeal);
 appealRouter.patch("/appeals/:appealId/resolve", resolveAppeal);
+
+/**
+ * @openapi
+ * /appeals/{appealId}/claim:
+ *   patch:
+ *     tags: [Appeals, Lecturers]
+ *     summary: Assign an appeal to a course lecturer and begin review
+ *     parameters:
+ *       - in: path
+ *         name: appealId
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200: { description: Appeal claimed }
+ *       403: { description: Lecturer is not assigned to the course }
+ *       409: { description: Appeal is assigned or already resolved }
+ */
+appealRouter.patch("/appeals/:appealId/claim", claimAppeal);
+
+/**
+ * @openapi
+ * /appeals/{appealId}/cancel:
+ *   patch:
+ *     tags: [Appeals, Students]
+ *     summary: Cancel an appeal before review starts
+ *     parameters:
+ *       - in: path
+ *         name: appealId
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200: { description: Appeal cancelled }
+ *       403: { description: Appeal belongs to another student }
+ *       409: { description: Review has already started }
+ */
+appealRouter.patch("/appeals/:appealId/cancel", cancelAppeal);
+
+/**
+ * @openapi
+ * /appeals/{appealId}/evidence:
+ *   post:
+ *     tags: [Appeals, Students]
+ *     summary: Add evidence before appeal review starts
+ *     parameters:
+ *       - in: path
+ *         name: appealId
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     requestBody:
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               studentId: { type: string, format: uuid }
+ *               fileIds: { type: string, description: JSON array of file UUIDs }
+ *               files:
+ *                 type: array
+ *                 maxItems: 5
+ *                 items: { type: string, format: binary }
+ *     responses:
+ *       200: { description: Updated appeal }
+ *       409: { description: Review has already started }
+ */
+appealRouter.post(
+  "/appeals/:appealId/evidence",
+  uploadSingleDocument.array("files", 5),
+  addAppealEvidence,
+);
+appealRouter.delete(
+  "/appeals/:appealId/evidence/:fileId",
+  removeAppealEvidence,
+);
+appealRouter.get(
+  "/appeals/:appealId/evidence/:fileId",
+  downloadAppealEvidence,
+);
+
+/**
+ * @openapi
+ * /appeals/{appealId}/ai-review:
+ *   post:
+ *     tags: [Appeals, Lecturers]
+ *     summary: Generate an AI recommendation or let AI resolve the appeal
+ *     parameters:
+ *       - in: path
+ *         name: appealId
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/AiAppealReviewRequest'
+ *     responses:
+ *       200: { description: Appeal with AI recommendation or decision }
+ *       403: { description: Lecturer is not assigned to the course }
+ *       409: { description: Appeal is assigned elsewhere or already resolved }
+ *       502: { description: AI provider failed }
+ */
+appealRouter.post("/appeals/:appealId/ai-review", reviewAppealWithAi);

@@ -23,6 +23,7 @@ import {
   UploadValidationError,
 } from "../storage/upload-mime.js";
 import { isUuid } from "./user-controller.utils.js";
+import { notificationService } from "../services/notification.service.js";
 
 const submissionRepository = new SubmissionRepository();
 const assignmentRepository = new AssignmentRepository();
@@ -177,6 +178,9 @@ export const createSubmission = async (
         assignmentId,
         assignment.maxScore,
       );
+      await notificationService.safely("submission received", () =>
+        notificationService.notifySubmissionSubmitted(submission.id),
+      );
     }
 
     res.status(submit ? 202 : 201).json({
@@ -257,6 +261,9 @@ export const submitSubmission = async (
       submission.id,
       existing.assignmentId,
       existing.assignment.maxScore,
+    );
+    await notificationService.safely("submission received", () =>
+      notificationService.notifySubmissionSubmitted(submission.id),
     );
 
     res.status(202).json({

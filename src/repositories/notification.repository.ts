@@ -26,6 +26,7 @@ export interface CreateNotificationInput {
   isRead?: boolean;
   link?: string | null;
   metadata?: Record<string, unknown> | null;
+  eventKey?: string | null;
   readAt?: Date | null;
 }
 
@@ -130,12 +131,27 @@ export class NotificationRepository {
   async createNotification(
     data: CreateNotificationInput,
   ): Promise<Notification> {
+    return (await this.createNotificationIfAbsent(data)).notification;
+  }
+
+  async createNotificationIfAbsent(
+    data: CreateNotificationInput,
+  ): Promise<{ notification: Notification; created: boolean }> {
     const user = await this.userRepo.findOne({
       where: { id: data.recipientId },
     });
 
     if (!user) {
       throw new NotificationUserNotFoundError(data.recipientId);
+    }
+
+    if (data.eventKey) {
+      const existing = await this.notificationRepo.findOne({
+        where: { recipientId: data.recipientId, eventKey: data.eventKey },
+      });
+      if (existing) {
+        return { notification: existing, created: false };
+      }
     }
 
     const notification = this.notificationRepo.create({
@@ -146,10 +162,32 @@ export class NotificationRepository {
       isRead: data.isRead ?? false,
       link: data.link ?? null,
       metadata: data.metadata ?? null,
+      eventKey: data.eventKey ?? null,
       readAt: data.readAt ?? (data.isRead ? new Date() : null),
     });
 
-    return this.notificationRepo.save(notification);
+    try {
+      return {
+        notification: await this.notificationRepo.save(notification),
+        created: true,
+      };
+    } catch (error) {
+      if (
+        data.eventKey &&
+        typeof error === "object" &&
+        error !== null &&
+        "code" in error &&
+        error.code === "23505"
+      ) {
+        const existing = await this.notificationRepo.findOne({
+          where: { recipientId: data.recipientId, eventKey: data.eventKey },
+        });
+        if (existing) {
+          return { notification: existing, created: false };
+        }
+      }
+      throw error;
+    }
   }
 
   async deleteNotification(notificationId: string): Promise<boolean> {
