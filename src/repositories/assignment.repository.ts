@@ -304,16 +304,20 @@ export class AssignmentRepository {
         submission.evaluations?.find(
           (e) => e.status === EvaluationStatus.COMPLETED,
         );
+      const latestEvaluation = [...(submission.evaluations ?? [])].sort(
+        (a, b) => b.createdAt.getTime() - a.createdAt.getTime(),
+      )[0];
+      const displayedEvaluation = finalEval ?? latestEvaluation;
 
-      if (finalEval) {
+      if (displayedEvaluation) {
         evaluationSummary = {
-          id: finalEval.id,
-          score: finalEval.score,
-          maxScore: finalEval.maxScore,
-          feedback: finalEval.feedback,
-          status: finalEval.status,
-          isFinal: finalEval.isFinal,
-          evaluatedAt: finalEval.completedAt,
+          id: displayedEvaluation.id,
+          score: displayedEvaluation.score,
+          maxScore: displayedEvaluation.maxScore,
+          feedback: displayedEvaluation.feedback,
+          status: displayedEvaluation.status,
+          isFinal: displayedEvaluation.isFinal,
+          evaluatedAt: displayedEvaluation.completedAt,
         };
       }
 
@@ -334,7 +338,7 @@ export class AssignmentRepository {
         evaluation: evaluationSummary,
       };
 
-      if (evaluationSummary) {
+      if (evaluationSummary?.status === EvaluationStatus.COMPLETED) {
         studentStatus = "GRADED";
       } else if (submission.status === SubmissionStatus.SUBMITTED) {
         studentStatus = "SUBMITTED";

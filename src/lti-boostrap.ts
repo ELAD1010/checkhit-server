@@ -27,6 +27,10 @@ import { handleUploadErrors } from "./middleware/upload.js";
 import { notificationWorker } from "./workers/notification.worker.js";
 import { createMoodlePlatformConfig } from "./config/moodle-platform.config.js";
 import { evaluationRealtime } from "./realtime/evaluation-realtime.js";
+import {
+  backdateAndResignJwt,
+  createDeepLinkSubmissionForm,
+} from "./services/deep-link-token.service.js";
 
 dotenv.config();
 
@@ -40,7 +44,9 @@ const registerMoodlePlatform = async (): Promise<void> => {
     return;
   }
   if (!process.env.MOODLE_URL || !process.env.MOODLE_CLIENT_ID) {
-    throw new Error("MOODLE_URL and MOODLE_CLIENT_ID are required for Moodle LTI registration");
+    throw new Error(
+      "MOODLE_URL and MOODLE_CLIENT_ID are required for Moodle LTI registration",
+    );
   }
   const platformConfig = createMoodlePlatformConfig(
     process.env.MOODLE_URL,
@@ -102,7 +108,10 @@ export const boostrapLti = async (db: Database): Promise<void> => {
   );
 
   lti.whitelist(
-    { route: new RegExp(/^\/api\/.*/) as unknown as string, method: "ALL" },
+    {
+      route: /^\/api\/.*/ as unknown as string,
+      method: "ALL",
+    },
     "/api-docs",
     "/api-docs/",
     "/api-docs.json",
@@ -178,9 +187,14 @@ export const boostrapLti = async (db: Database): Promise<void> => {
         return res.status(401).send("Unauthorized: Missing LTI session");
       }
 
-      const synchronized = await ltiLaunchSyncService.synchronize(
-        res.locals.token as LtiToken,
-      );
+      const launchToken = res.locals.token as LtiToken & {
+        platformContext: LtiToken["platformContext"] & {
+          deepLinkingSettings?: {
+            deep_link_return_url?: string;
+          };
+        };
+      };
+      const synchronized = await ltiLaunchSyncService.synchronize(launchToken);
 
       if (synchronized.role !== UserRole.LECTURER) {
         return res.status(403).send("Only lecturers can create deep links");
@@ -211,11 +225,34 @@ export const boostrapLti = async (db: Database): Promise<void> => {
         },
       ];
 
-      const formHtml = await lti.DeepLinking.createDeepLinkingForm(
-        res.locals.token,
+      const message = await lti.DeepLinking.createDeepLinkingMessage(
+        launchToken,
         contentItems,
         { message: "המטלה נוצרה וצורפה לקורס בהצלחה!" },
       );
+      if (typeof message !== "string") {
+        throw new Error("Deep-link message could not be created");
+      }
+      const returnUrl =
+        launchToken.platformContext.deepLinkingSettings?.deep_link_return_url;
+      if (!returnUrl || !launchToken.clientId) {
+        throw new Error("Deep-link launch context is incomplete");
+      }
+
+      const platform = await lti.getPlatform(
+        launchToken.iss,
+        launchToken.clientId,
+      );
+      if (!platform || Array.isArray(platform)) {
+        throw new Error("Deep-link platform was not found");
+      }
+      const privateKey = await platform.platformPrivateKey();
+      if (typeof privateKey !== "string") {
+        throw new Error("Deep-link signing key was not found");
+      }
+
+      const adjustedMessage = backdateAndResignJwt(message, privateKey);
+      const formHtml = createDeepLinkSubmissionForm(returnUrl, adjustedMessage);
 
       return res.send(formHtml);
     } catch (error) {
@@ -243,9 +280,7 @@ export const boostrapLti = async (db: Database): Promise<void> => {
     await lti.close();
     throw error;
   }
-  console.log(
-    `🚀 LTI Tool Provider Engine live on port ${port}`,
-  );
+  console.log(`🚀 LTI Tool Provider Engine live on port ${port}`);
 
   gradingWorker.start();
   notificationWorker.start();

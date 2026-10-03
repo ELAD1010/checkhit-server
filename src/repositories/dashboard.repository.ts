@@ -338,6 +338,7 @@ export class DashboardRepository {
     }
 
     // 5. Final completed evaluations for grade distribution
+    // Distribution is per student average (not per evaluation).
     const rawEvaluations = await this.evalRepo
       .createQueryBuilder("eval")
       .innerJoin("eval.submission", "submission")
@@ -359,48 +360,58 @@ export class DashboardRepository {
       .addSelect("eval.maxScore", "maxScore")
       .getRawMany();
 
-    const allPercentageScores: number[] = [];
-    const courseScoresMap = new Map<
+    const courseStudentScores = new Map<
       string,
       {
         courseName: string;
-        scores: number[];
-        studentIds: Set<string>;
+        byStudent: Map<string, number[]>;
       }
     >();
+    const allStudentScores = new Map<string, number[]>();
 
     for (const c of courses) {
-      courseScoresMap.set(c.id, {
+      courseStudentScores.set(c.id, {
         courseName: c.name,
-        scores: [],
-        studentIds: new Set(),
+        byStudent: new Map(),
       });
     }
 
     for (const row of rawEvaluations) {
       const score = parseFloat(row.score);
       const maxScore = parseFloat(row.maxScore) || 100;
-      if (!isNaN(score) && maxScore > 0) {
-        const percentScore = (score / maxScore) * 100;
-        allPercentageScores.push(percentScore);
-
-        const courseData = courseScoresMap.get(row.courseId);
-        if (courseData) {
-          courseData.scores.push(percentScore);
-          if (row.studentId) {
-            courseData.studentIds.add(row.studentId);
-          }
-        }
+      const studentId = row.studentId as string | undefined;
+      if (!studentId || isNaN(score) || maxScore <= 0) {
+        continue;
       }
+
+      const percentScore = (score / maxScore) * 100;
+
+      const courseData = courseStudentScores.get(row.courseId);
+      if (courseData) {
+        const existing = courseData.byStudent.get(studentId) ?? [];
+        existing.push(percentScore);
+        courseData.byStudent.set(studentId, existing);
+      }
+
+      const globalExisting = allStudentScores.get(studentId) ?? [];
+      globalExisting.push(percentScore);
+      allStudentScores.set(studentId, globalExisting);
     }
 
-    const overallDistribution = this.buildGradeRanges(allPercentageScores);
+    const averageOf = (scores: number[]): number =>
+      scores.reduce((sum, value) => sum + value, 0) / scores.length;
+
+    const allStudentAverages = Array.from(allStudentScores.values()).map(
+      averageOf,
+    );
+    const overallDistribution = this.buildGradeRanges(allStudentAverages);
 
     const byCourseDistribution: GradeDistributionCourseData[] = [];
-    for (const [cId, data] of courseScoresMap.entries()) {
-      const course = courses.find((c) => c.id === cId);
-      const dist = this.buildGradeRanges(data.scores);
-      const totalStudents = course?.studentsCount ?? data.studentIds.size;
+    for (const [cId, data] of courseStudentScores.entries()) {
+      const studentAverages = Array.from(data.byStudent.values()).map(
+        averageOf,
+      );
+      const dist = this.buildGradeRanges(studentAverages);
 
       byCourseDistribution.push({
         courseId: cId,
@@ -409,7 +420,7 @@ export class DashboardRepository {
         average: dist.average,
         median: dist.median,
         passRate: dist.passRate,
-        totalStudents: Number(totalStudents) || 0,
+        totalStudents: studentAverages.length,
         data: dist.ranges,
       });
     }
@@ -613,10 +624,7 @@ export class DashboardRepository {
           average: overallDistribution.average,
           median: overallDistribution.median,
           passRate: overallDistribution.passRate,
-          totalStudents: courses.reduce(
-            (acc, c) => acc + (Number(c.studentsCount) || 0),
-            0,
-          ),
+          totalStudents: allStudentAverages.length,
           data: overallDistribution.ranges,
         },
         byCourse: byCourseDistribution,
