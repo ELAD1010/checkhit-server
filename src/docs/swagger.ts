@@ -25,6 +25,7 @@ const openApiDocument = swaggerJsdoc({
       { name: "Questions" },
       { name: "Submissions" },
       { name: "Evaluations" },
+      { name: "Appeals" },
       { name: "LTI" },
     ],
     components: openApiComponents,

@@ -18,7 +18,7 @@ import { Student } from "./student.js";
 import { Submission } from "./submission.js";
 
 @Entity({ name: "appeals" })
-@Index("IDX_appeal_submission", ["submissionId"])
+@Index("UQ_appeal_submission", ["submissionId"], { unique: true })
 @Index("IDX_appeal_evaluation", ["evaluationId"])
 @Index("IDX_appeal_student", ["studentId"])
 @Index("UQ_appeal_active_evaluation", ["evaluationId"], {

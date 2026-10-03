@@ -422,19 +422,21 @@ export const openApiComponents = {
     },
     AppealFile: {
       type: "object",
+      required: ["id", "fileId", "name", "mimeType", "sizeBytes", "downloadUrl"],
       properties: {
-        appealId: { type: "string", format: "uuid" },
+        id: { type: "string", format: "uuid" },
         fileId: { type: "string", format: "uuid" },
-        file: {
-          type: "object",
-          properties: {
-            id: { type: "string", format: "uuid" },
-            originalName: { type: "string" },
-            mimeType: { type: "string" },
-            sizeBytes: { type: "integer" },
-            s3Key: { type: "string" },
-          },
+        name: { type: "string" },
+        mimeType: {
+          type: "string",
+          enum: [
+            "application/pdf",
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            "text/plain",
+          ],
         },
+        sizeBytes: { type: "integer" },
+        downloadUrl: { type: "string" },
       },
     },
     AppealCourse: {
@@ -578,12 +580,6 @@ export const openApiComponents = {
                 enum: ["ACCEPTED", "REJECTED"],
               },
               resolution: { type: "string" },
-              reviewerId: {
-                type: "string",
-                format: "uuid",
-                description:
-                  "Optional when lecturer identity is derived from the LTI session.",
-              },
               newScore: { type: "number", minimum: 0 },
             },
           },
@@ -592,12 +588,6 @@ export const openApiComponents = {
             required: ["submissionId", "reason"],
             properties: {
               submissionId: { type: "string", format: "uuid" },
-              studentId: {
-                type: "string",
-                format: "uuid",
-                description:
-                  "Local-development fallback when no LTI identity is available.",
-              },
               reason: { type: "string", minLength: 20, maxLength: 5000 },
               category: {
                 type: "string",
@@ -608,22 +598,12 @@ export const openApiComponents = {
                   "other",
                 ],
               },
-              fileIds: {
-                type: "array",
-                maxItems: 5,
-                items: { type: "string", format: "uuid" },
-              },
+              file: { type: "string", format: "binary" },
             },
           },
           AiAppealReviewRequest: {
             type: "object",
             properties: {
-              reviewerId: {
-                type: "string",
-                format: "uuid",
-                description:
-                  "Local-development fallback when no LTI identity is available.",
-              },
               autoResolve: {
                 type: "boolean",
                 default: false,
