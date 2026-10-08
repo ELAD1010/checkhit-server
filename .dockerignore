@@ -8,4 +8,4 @@ scratch
 *.log
 Dockerfile
 docker-compose.yml
-Caddyfile
+deploy
