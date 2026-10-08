@@ -244,11 +244,17 @@ export class DashboardRepository {
       .orderBy("course.createdAt", "DESC");
 
     const rawAndEntities = await coursesQb.getRawAndEntities();
-    const courses = rawAndEntities.entities.map((course, idx) => {
-      const raw = rawAndEntities.raw[idx];
-      course.studentsCount = Number(
-        raw?.course_students_count ?? raw?.studentsCount ?? 0,
+    // Joined assignment rows repeat each course, so raw rows do not line up
+    // with the de-duplicated entities by index.
+    const countsByCourseId = new Map<unknown, unknown>();
+    for (const raw of rawAndEntities.raw) {
+      countsByCourseId.set(
+        raw.course_course_id,
+        raw.course_students_count ?? raw.studentsCount,
       );
+    }
+    const courses = rawAndEntities.entities.map((course) => {
+      course.studentsCount = Number(countsByCourseId.get(course.id) ?? 0);
       return course;
     });
 

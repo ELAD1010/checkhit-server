@@ -7,6 +7,15 @@ Welcome to the **CheckHit API** documentation. This REST API facilitates managin
 - **OpenAPI Specification**: `3.1.0`
 - **Authentication**: `ltiToken` query parameter (`?ltik=<token>`) issued by `ltijs` after an LTI launch where required.
 
+### Authorization model
+
+- The LTI session is the caller's identity. Requests without one receive `401 Unauthorized` (`{"message": "Missing LTI session"}`).
+- User IDs in paths, query strings, `x-user-id`, or request bodies (`userId`, `senderId`) must match the launched user; otherwise the API returns `403 Forbidden`.
+- Course and assignment resources require membership in the resource's course: an active enrollment for students, or a course lecturer record for lecturers. Membership is checked against the resource's own course, so a launch from one Moodle course can act on the user's other courses. Non-members receive `403` (or `404` for submissions, questions, and evaluations).
+- Students never see `DRAFT` assignments.
+- `POST /api/students` and `POST /api/lecturers` are only available with the local-development fallback below.
+- **Local development without Moodle**: setting `ALLOW_INSECURE_DEV_AUTH=true` lets requests without an LTI session through using caller-supplied IDs, with no ownership checks. Never enable it in a shared or production environment.
+
 ---
 
 ## Table of Contents
@@ -42,6 +51,8 @@ Welcome to the **CheckHit API** documentation. This REST API facilitates managin
    - [Get Student Assignment Detail (`GET /api/students/{studentId}/assignments/{assignmentId}`)](#get-apistudentsstudentidassignmentsassignmentid)
    - [Get Lecturer Assignment Overview (`GET /api/assignments/{assignmentId}/lecturer-overview`)](#get-apiassignmentsassignmentidlecturer-overview)
    - [Delete an Assignment (`DELETE /api/assignments/{assignmentId}`)](#delete-apiassignmentsassignmentid)
+   - [Submission Rules](#submission-rules)
+   - [Download a Submission File (`GET /api/submissions/{submissionId}/files/{fileId}`)](#get-apisubmissionssubmissionidfilesfileid)
 6. [5. Appeals Endpoints](#5-appeals)
    - [Create Appeal (`POST /api/appeals`)](#post-apiappeals)
    - [Claim Appeal (`PATCH /api/appeals/{appealId}/claim`)](#patch-apiappealsappealidclaim)
@@ -961,7 +972,8 @@ Retrieves a single assignment by its ID. If the optional `studentId` query param
             "id": "7b21389e-4c4f-4632-9dfa-25c276537b01",
             "name": "binary_tree_submission.zip",
             "sizeBytes": 1258291,
-            "mimeType": "application/zip"
+            "mimeType": "application/zip",
+            "downloadUrl": "/api/submissions/e4414c2b-e7b8-450f-a3ff-21ebfb2540b6/files/7b21389e-4c4f-4632-9dfa-25c276537b01"
           }
         ],
         "evaluation": {
@@ -1102,6 +1114,35 @@ Deletes an assignment by ID along with its submissions and evaluations.
   - **`400 Bad Request`**: Invalid assignment ID.
   - **`404 Not Found`**: Assignment not found.
   - **`500 Internal Server Error`**: Server error.
+
+---
+
+### Submission rules
+Applies to `POST /api/assignments/{assignmentId}/submissions` (new attempt), `POST /api/submissions/{submissionId}/submit` (submit a draft), and `PATCH /api/submissions/{submissionId}` (edit a draft). A rejected request returns `409 Conflict` with `{"message": "...", "code": "<CODE>"}`. Concurrent requests from the same student are serialized, so simultaneous submits produce one success and one `409`.
+
+| Code | When |
+| --- | --- |
+| `ASSIGNMENT_CLOSED` | The assignment is `CLOSED` or `ARCHIVED`. |
+| `ASSIGNMENT_NOT_OPEN` | `startAt` is in the future. |
+| `DEADLINE_PASSED` | `dueAt` has passed. There is no late submission; this also blocks submitting or editing a draft saved before the deadline. |
+| `APPEAL_IN_PROGRESS` | The student has a `SUBMITTED` or `UNDER_REVIEW` appeal on this assignment. |
+| `DRAFT_EXISTS` | New attempt only: the latest attempt is still a draft. |
+| `GRADING_IN_PROGRESS` | New attempt only: the latest attempt has no `COMPLETED` or `FAILED` evaluation yet. |
+| `ALREADY_SUBMITTED` | Submit or edit only: the attempt is no longer a draft. |
+
+---
+
+### `GET /api/submissions/{submissionId}/files/{fileId}`
+Downloads a file attached to a submission. Use the `downloadUrl` returned in the student assignment detail.
+
+- **Tags**: `Submissions`
+- **Security**: Requires an active LTI session (`ltik` token). The submission's owner and lecturers of its course may download; other course members receive `403`, and users outside the course receive `404`.
+- **Responses**:
+  - **`200 OK`**: The file bytes, with the stored `Content-Type` and `Content-Disposition: attachment; filename*=UTF-8''<name>`. `Content-Disposition` is exposed to cross-origin callers.
+  - **`400 Bad Request`**: Invalid submission or file ID.
+  - **`401 Unauthorized`**: Missing LTI session.
+  - **`403 Forbidden`**: A student who does not own the submission.
+  - **`404 Not Found`**: Submission not found, not accessible, or the file is not part of it.
 
 ---
 
@@ -1314,7 +1355,20 @@ Generates an auto-submitting HTML form that completes the LTI 1.3 Deep Linking w
 - **Responses**:
   - **`200 OK`** (`text/html`): HTML form with signed JWT payload that submits the deep link response to LMS.
   - **`401 Unauthorized`**: Missing or invalid LTI session.
+  - **`409 Conflict`**: `{"code": "NOT_DEEP_LINKING_LAUNCH", ...}` when the current launch is not a deep-linking request (for example, a lecturer opened the tool from a regular course link).
   - **`500 Internal Server Error`**: Error generating deep link.
+
+---
+
+### Grade passback (LTI Assignment and Grade Services)
+A background worker sends final grades to the Moodle gradebook. For each resource link launched with an AGS line item, it posts each student's most recent submitted attempt that has a completed final evaluation to the line item's `/scores` endpoint (`activityProgress: "Completed"`, `gradingProgress: "FullyGraded"`). A score is sent again only when it changes. Failed sends are retried with exponential backoff (from 1 minute up to 6 hours); the status is kept in the `lti_score_syncs` table.
+
+| Environment variable | Default | Purpose |
+| --- | --- | --- |
+| `GRADE_PASSBACK_ENABLED` | `true` | Set to `false` to disable the worker. |
+| `GRADE_PASSBACK_POLL_INTERVAL_MS` | `60000` | How often to check for grades to send (minimum `15000`). |
+| `GRADE_PASSBACK_TIMEOUT_MS` | `15000` | How long to wait for each score request. |
+| `MOODLE_API_TIMEOUT_MS` | `10000` | Timeout for Moodle web-service calls made during launch. |
 
 ---
 
@@ -1587,6 +1641,8 @@ Creates and dispatches a new direct message or course-wide announcement.
 
 ### `POST /api/messages/{id}/replies`
 Appends a reply to an existing message thread.
+
+The thread becomes unread (and un-archived) for the other participants: the original sender and the original recipients, excluding the replier. When a student replies to a course broadcast, only the broadcast's author is notified, not the other students. Each recipient gets a "New message reply" notification linking to `/student/messages?message=<threadId>` or `/lecturer/messages?message=<threadId>`, according to their role. Delivery statistics (`recipientCount`, `readCount`) do not count the original sender.
 
 - **Tags**: `Messages`
 - **Path Parameters**:

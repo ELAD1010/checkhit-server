@@ -11,6 +11,8 @@ import { FileAssetRepository } from "../repositories/file-asset.repository.js";
 import { QuestionImportRepository } from "../repositories/question-import.repository.js";
 import { isUuid, getDatabaseErrorCode } from "./user-controller.utils.js";
 import type { AuthenticatedRequest } from "../middleware/lti-auth.js";
+import { accessControl } from "../middleware/access-control.js";
+import type { LtiLaunchSyncResult } from "../services/lti-launch-sync.service.js";
 import type { UploadedFile } from "../middleware/upload.js";
 import {
   LocalFileStorage,
@@ -85,13 +87,16 @@ const parseQuestionsBody = (body: unknown): ParsedQuestion[] | null => {
   return parsed;
 };
 
-const assertAssignmentInCourse = async (
+const assertAssignmentAccessible = async (
   assignmentId: string,
-  courseId: string,
+  auth: LtiLaunchSyncResult,
 ) => {
   const assignment =
     await assignmentRepository.findAssignmentById(assignmentId);
-  if (!assignment || assignment.courseId !== courseId) {
+  if (
+    !assignment ||
+    !(await accessControl.access.canAccessCourse(auth, assignment.courseId))
+  ) {
     return null;
   }
 
@@ -113,10 +118,7 @@ export const listAssignmentQuestions = async (
   }
 
   try {
-    const assignment = await assertAssignmentInCourse(
-      assignmentId,
-      req.auth.courseId,
-    );
+    const assignment = await assertAssignmentAccessible(assignmentId, req.auth);
     if (!assignment) {
       res.status(404).json({ message: "Assignment not found" });
       return;
@@ -154,10 +156,7 @@ export const replaceAssignmentQuestions = async (
   }
 
   try {
-    const assignment = await assertAssignmentInCourse(
-      assignmentId,
-      req.auth.courseId,
-    );
+    const assignment = await assertAssignmentAccessible(assignmentId, req.auth);
     if (!assignment) {
       res.status(404).json({ message: "Assignment not found" });
       return;
@@ -219,10 +218,7 @@ export const importAssignmentQuestionsFromDocument = async (
   let stagedObjectKey: string | null = null;
   let importPersisted = false;
   try {
-    const assignment = await assertAssignmentInCourse(
-      assignmentId,
-      req.auth.courseId,
-    );
+    const assignment = await assertAssignmentAccessible(assignmentId, req.auth);
     if (!assignment) {
       res.status(404).json({ message: "Assignment not found" });
       return;
@@ -291,7 +287,10 @@ export const getQuestionImportStatus = async (
     const questionImport = await questionImportRepository.findById(importId);
     if (
       !questionImport ||
-      questionImport.assignment.courseId !== req.auth.courseId
+      !(await accessControl.access.canAccessCourse(
+        req.auth,
+        questionImport.assignment.courseId,
+      ))
     ) {
       res.status(404).json({ message: "Question import not found" });
       return;

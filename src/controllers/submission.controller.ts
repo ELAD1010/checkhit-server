@@ -1,6 +1,6 @@
 import { Response } from "express";
 import { getGradingConfig } from "../config/grading.config.js";
-import { SubmissionStatus } from "../entities/enums.js";
+import { AssignmentStatus, SubmissionStatus } from "../entities/enums.js";
 import { AssignmentRepository } from "../repositories/assignment.repository.js";
 import { AssignmentQuestionRepository } from "../repositories/assignment-question.repository.js";
 import { EvaluationRepository } from "../repositories/evaluation.repository.js";
@@ -9,9 +9,12 @@ import {
   StudentNotFoundError,
   SubmissionAlreadySubmittedError,
   SubmissionNotFoundError,
+  SubmissionRejectedError,
   SubmissionRepository,
 } from "../repositories/submission.repository.js";
 import type { AuthenticatedRequest } from "../middleware/lti-auth.js";
+import { accessControl } from "../middleware/access-control.js";
+import type { LtiLaunchSyncResult } from "../services/lti-launch-sync.service.js";
 import type { UploadedFile } from "../middleware/upload.js";
 import {
   LocalFileStorage,
@@ -32,13 +35,16 @@ const evaluationRepository = new EvaluationRepository();
 const fileAssetRepository = new FileAssetRepository();
 const fileStorage: FileStorage = new LocalFileStorage();
 
-const assertAssignmentInCourse = async (
+const assertAssignmentAccessible = async (
   assignmentId: string,
-  courseId: string,
+  auth: LtiLaunchSyncResult,
 ) => {
   const assignment =
     await assignmentRepository.findAssignmentById(assignmentId);
-  if (!assignment || assignment.courseId !== courseId) {
+  if (
+    !assignment ||
+    !(await accessControl.access.canAccessCourse(auth, assignment.courseId))
+  ) {
     return null;
   }
 
@@ -81,6 +87,12 @@ const cleanupStoredAssets = async (
       await fileStorage.delete(asset.objectKey).catch(() => undefined);
     }),
   );
+};
+
+const sendSubmissionRejection = (error: unknown, res: Response): boolean => {
+  if (!(error instanceof SubmissionRejectedError)) return false;
+  res.status(409).json({ message: error.message, code: error.code });
+  return true;
 };
 
 const parseBooleanInput = (value: unknown): boolean =>
@@ -136,11 +148,8 @@ export const createSubmission = async (
   let stagedAssets: Array<{ id: string; objectKey: string }> = [];
   let submissionPersisted = false;
   try {
-    const assignment = await assertAssignmentInCourse(
-      assignmentId,
-      req.auth.courseId,
-    );
-    if (!assignment) {
+    const assignment = await assertAssignmentAccessible(assignmentId, req.auth);
+    if (!assignment || assignment.status === AssignmentStatus.DRAFT) {
       res.status(404).json({ message: "Assignment not found" });
       return;
     }
@@ -212,6 +221,8 @@ export const createSubmission = async (
       return;
     }
 
+    if (sendSubmissionRejection(error, res)) return;
+
     console.error("Failed to create submission:", error);
     res.status(500).json({ message: "Failed to create submission" });
   }
@@ -238,7 +249,12 @@ export const submitSubmission = async (
       return;
     }
 
-    if (existing.assignment.courseId !== req.auth.courseId) {
+    if (
+      !(await accessControl.access.canAccessCourse(
+        req.auth,
+        existing.assignment.courseId,
+      ))
+    ) {
       res.status(404).json({ message: "Submission not found" });
       return;
     }
@@ -282,9 +298,14 @@ export const submitSubmission = async (
     }
 
     if (error instanceof SubmissionAlreadySubmittedError) {
-      res.status(409).json({ message: "Submission already submitted" });
+      res.status(409).json({
+        message: "Submission already submitted",
+        code: "ALREADY_SUBMITTED",
+      });
       return;
     }
+
+    if (sendSubmissionRejection(error, res)) return;
 
     console.error("Failed to submit submission:", error);
     res.status(500).json({ message: "Failed to submit submission" });
@@ -333,7 +354,12 @@ export const updateDraftSubmission = async (
       return;
     }
 
-    if (existing.assignment.courseId !== req.auth.courseId) {
+    if (
+      !(await accessControl.access.canAccessCourse(
+        req.auth,
+        existing.assignment.courseId,
+      ))
+    ) {
       res.status(404).json({ message: "Submission not found" });
       return;
     }
@@ -383,9 +409,14 @@ export const updateDraftSubmission = async (
     }
 
     if (error instanceof SubmissionAlreadySubmittedError) {
-      res.status(409).json({ message: "Submission already submitted" });
+      res.status(409).json({
+        message: "Submission already submitted",
+        code: "ALREADY_SUBMITTED",
+      });
       return;
     }
+
+    if (sendSubmissionRejection(error, res)) return;
 
     console.error("Failed to update draft submission:", error);
     res.status(500).json({ message: "Failed to update draft submission" });
@@ -408,7 +439,13 @@ export const getSubmission = async (
 
   try {
     const submission = await submissionRepository.findById(submissionId);
-    if (!submission || submission.assignment.courseId !== req.auth.courseId) {
+    if (
+      !submission ||
+      !(await accessControl.access.canAccessCourse(
+        req.auth,
+        submission.assignment.courseId,
+      ))
+    ) {
       res.status(404).json({ message: "Submission not found" });
       return;
     }
@@ -428,6 +465,62 @@ export const getSubmission = async (
   }
 };
 
+export const downloadSubmissionFile = async (
+  req: AuthenticatedRequest,
+  res: Response,
+): Promise<void> => {
+  const submissionId =
+    typeof req.params.submissionId === "string" ? req.params.submissionId : "";
+  const fileId = typeof req.params.fileId === "string" ? req.params.fileId : "";
+  if (!req.auth || !isUuid(submissionId) || !isUuid(fileId)) {
+    res
+      .status(req.auth ? 400 : 401)
+      .json({ message: "Valid submission and file IDs are required" });
+    return;
+  }
+
+  try {
+    const submission = await submissionRepository.findById(submissionId);
+    if (
+      !submission ||
+      !(await accessControl.access.canAccessCourse(
+        req.auth,
+        submission.assignment.courseId,
+      ))
+    ) {
+      res.status(404).json({ message: "Submission not found" });
+      return;
+    }
+
+    if (
+      req.auth.role === "STUDENT" &&
+      submission.studentId !== req.auth.userId
+    ) {
+      res.status(403).json({ message: "Forbidden" });
+      return;
+    }
+
+    const file = submission.files?.find((link) => link.fileId === fileId)?.file;
+    if (!file) {
+      res.status(404).json({ message: "Submission file not found" });
+      return;
+    }
+
+    const buffer = await fileStorage.read(file.objectKey);
+    res.setHeader("Content-Type", file.mimeType);
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename*=UTF-8''${encodeURIComponent(file.originalName)}`,
+    );
+    // The UI is served from another origin and reads the filename from this header.
+    res.setHeader("Access-Control-Expose-Headers", "Content-Disposition");
+    res.send(buffer);
+  } catch (error) {
+    console.error("Failed to download submission file:", error);
+    res.status(500).json({ message: "Failed to download submission file" });
+  }
+};
+
 export const listAssignmentSubmissions = async (
   req: AuthenticatedRequest,
   res: Response,
@@ -443,10 +536,7 @@ export const listAssignmentSubmissions = async (
   }
 
   try {
-    const assignment = await assertAssignmentInCourse(
-      assignmentId,
-      req.auth.courseId,
-    );
+    const assignment = await assertAssignmentAccessible(assignmentId, req.auth);
     if (!assignment) {
       res.status(404).json({ message: "Assignment not found" });
       return;

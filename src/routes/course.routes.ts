@@ -7,8 +7,17 @@ import {
   getStudentCourses,
   getStudentUrgentCourses,
 } from "../controllers/course.controller.js";
+import { LecturerPermission, UserRole } from "../entities/enums.js";
+import { accessControl } from "../middleware/access-control.js";
 
 export const courseRouter = Router();
+const {
+  requireIdentity,
+  requireSelf,
+  requireRole,
+  requireCourseMember,
+  requireCourseLecturer,
+} = accessControl;
 
 /**
  * @openapi
@@ -37,7 +46,12 @@ export const courseRouter = Router();
  *       500:
  *         description: Server error
  */
-courseRouter.post("/courses", createCourse);
+courseRouter.post(
+  "/courses",
+  requireIdentity,
+  requireRole(UserRole.LECTURER),
+  createCourse,
+);
 
 /**
  * @openapi
@@ -67,7 +81,12 @@ courseRouter.post("/courses", createCourse);
  *       500:
  *         description: Server error
  */
-courseRouter.get("/courses/:courseId", getCourseById);
+courseRouter.get(
+  "/courses/:courseId",
+  requireIdentity,
+  requireCourseMember(),
+  getCourseById,
+);
 
 /**
  * @openapi
@@ -97,7 +116,12 @@ courseRouter.get("/courses/:courseId", getCourseById);
  *       500:
  *         description: Server error
  */
-courseRouter.get("/lecturers/:lecturerId/courses", getLecturerCourses);
+courseRouter.get(
+  "/lecturers/:lecturerId/courses",
+  requireIdentity,
+  requireSelf("lecturerId"),
+  getLecturerCourses,
+);
 
 /**
  * @openapi
@@ -148,7 +172,12 @@ courseRouter.get("/lecturers/:lecturerId/courses", getLecturerCourses);
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
-courseRouter.get("/students/:studentId/courses", getStudentCourses);
+courseRouter.get(
+  "/students/:studentId/courses",
+  requireIdentity,
+  requireSelf("studentId"),
+  getStudentCourses,
+);
 
 /**
  * @openapi
@@ -195,6 +224,8 @@ courseRouter.get("/students/:studentId/courses", getStudentCourses);
  */
 courseRouter.get(
   "/students/:studentId/courses/urgent",
+  requireIdentity,
+  requireSelf("studentId"),
   getStudentUrgentCourses,
 );
 
@@ -223,4 +254,9 @@ courseRouter.get(
  *       500:
  *         description: Server error
  */
-courseRouter.delete("/courses/:courseId", deleteCourse);
+courseRouter.delete(
+  "/courses/:courseId",
+  requireIdentity,
+  requireCourseLecturer("courseId", LecturerPermission.OWNER),
+  deleteCourse,
+);

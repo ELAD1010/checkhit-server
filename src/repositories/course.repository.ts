@@ -323,14 +323,20 @@ export class CourseRepository {
     entities: Course[];
     raw: Record<string, unknown>[];
   }): Course[] {
-    return rawAndEntities.entities.map((entity, idx) => {
-      const raw = rawAndEntities.raw[idx];
-      const count =
-        raw?.course_students_count ??
-        raw?.studentsCount ??
-        raw?.course_studentsCount ??
-        0;
-      entity.studentsCount = Number(count);
+    // Joined lecturer rows repeat each course, so raw rows do not line up
+    // with the de-duplicated entities by index.
+    const countsByCourseId = new Map<unknown, unknown>();
+    for (const raw of rawAndEntities.raw) {
+      countsByCourseId.set(
+        raw.course_course_id,
+        raw.course_students_count ??
+          raw.studentsCount ??
+          raw.course_studentsCount,
+      );
+    }
+
+    return rawAndEntities.entities.map((entity) => {
+      entity.studentsCount = Number(countsByCourseId.get(entity.id) ?? 0);
       return entity;
     });
   }

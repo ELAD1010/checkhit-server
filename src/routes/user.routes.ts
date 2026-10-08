@@ -9,8 +9,17 @@ import {
   getStudentById,
   getStudentsByCourseId,
 } from "../controllers/student.controller.js";
+import { UserRole } from "../entities/enums.js";
+import { accessControl } from "../middleware/access-control.js";
 
 export const userRouter = Router();
+const {
+  requireIdentity,
+  requireSelf,
+  requireRole,
+  requireInsecureDevAuth,
+  requireCourseLecturer,
+} = accessControl;
 
 
 /**
@@ -39,7 +48,7 @@ export const userRouter = Router();
  *       500:
  *         description: Server error
  */
-userRouter.post("/students", createStudent);
+userRouter.post("/students", requireInsecureDevAuth, createStudent);
 
 /**
  * @openapi
@@ -69,7 +78,12 @@ userRouter.post("/students", createStudent);
  *       500:
  *         description: Server error
  */
-userRouter.get("/students/:studentId", getStudentById);
+userRouter.get(
+  "/students/:studentId",
+  requireIdentity,
+  requireSelf("studentId"),
+  getStudentById,
+);
 
 /**
  * @openapi
@@ -99,7 +113,13 @@ userRouter.get("/students/:studentId", getStudentById);
  *       500:
  *         description: Server error
  */
-userRouter.get("/courses/:courseId/students", getStudentsByCourseId);
+userRouter.get(
+  "/courses/:courseId/students",
+  requireIdentity,
+  requireRole(UserRole.LECTURER),
+  requireCourseLecturer(),
+  getStudentsByCourseId,
+);
 
 /**
  * @openapi
@@ -127,7 +147,7 @@ userRouter.get("/courses/:courseId/students", getStudentsByCourseId);
  *       500:
  *         description: Server error
  */
-userRouter.post("/lecturers", createLecturer);
+userRouter.post("/lecturers", requireInsecureDevAuth, createLecturer);
 
 /**
  * @openapi
@@ -157,7 +177,12 @@ userRouter.post("/lecturers", createLecturer);
  *       500:
  *         description: Server error
  */
-userRouter.get("/lecturers/:lecturerId", getLecturerById);
+userRouter.get(
+  "/lecturers/:lecturerId",
+  requireIdentity,
+  requireSelf("lecturerId"),
+  getLecturerById,
+);
 
 /**
  * @openapi
@@ -200,4 +225,9 @@ userRouter.get("/lecturers/:lecturerId", getLecturerById);
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
-userRouter.get("/lecturers/:lecturerId/dashboard", getLecturerDashboard);
+userRouter.get(
+  "/lecturers/:lecturerId/dashboard",
+  requireIdentity,
+  requireSelf("lecturerId"),
+  getLecturerDashboard,
+);

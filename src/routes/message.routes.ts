@@ -8,9 +8,17 @@ import {
   getUnreadCount,
   markAsArchived,
   markAsRead,
+  rejectForeignMessageUser,
 } from "../controllers/message.controller.js";
+import { accessControl } from "../middleware/access-control.js";
 
 export const messageRouter = Router();
+
+messageRouter.use(
+  "/messages",
+  accessControl.requireIdentity,
+  rejectForeignMessageUser,
+);
 
 /**
  * @openapi

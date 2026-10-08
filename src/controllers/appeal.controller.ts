@@ -561,6 +561,8 @@ export const downloadAppealEvidence = async (
       "Content-Disposition",
       `attachment; filename*=UTF-8''${encodeURIComponent(evidence.file.originalName)}`,
     );
+    // The UI is served from another origin and reads the filename from this header.
+    res.setHeader("Access-Control-Expose-Headers", "Content-Disposition");
     res.send(buffer);
   } catch (error) {
     if (!sendAppealError(error, res)) {

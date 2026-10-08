@@ -1,6 +1,7 @@
 import { Response } from "express";
 import { EvaluationRepository } from "../repositories/evaluation.repository.js";
 import type { AuthenticatedRequest } from "../middleware/lti-auth.js";
+import { accessControl } from "../middleware/access-control.js";
 import { isUuid } from "./user-controller.utils.js";
 
 const evaluationRepository = new EvaluationRepository();
@@ -23,7 +24,10 @@ export const getEvaluation = async (
     const evaluation = await evaluationRepository.findById(evaluationId);
     if (
       !evaluation ||
-      evaluation.submission.assignment.courseId !== req.auth.courseId
+      !(await accessControl.access.canAccessCourse(
+        req.auth,
+        evaluation.submission.assignment.courseId,
+      ))
     ) {
       res.status(404).json({ message: "Evaluation not found" });
       return;

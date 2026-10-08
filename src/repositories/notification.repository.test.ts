@@ -3,7 +3,10 @@ import test from "node:test";
 import { NotificationCategory } from "../entities/enums.js";
 import { Notification } from "../entities/notification.js";
 import { User } from "../entities/user.js";
-import { NotificationRepository } from "./notification.repository.js";
+import {
+  NotificationNotFoundError,
+  NotificationRepository,
+} from "./notification.repository.js";
 
 test("notification event keys are idempotent per recipient", async () => {
   const saved: Notification[] = [];
@@ -44,4 +47,36 @@ test("notification event keys are idempotent per recipient", async () => {
   assert.equal(second.created, false);
   assert.equal(first.notification.id, second.notification.id);
   assert.equal(saved.length, 1);
+});
+
+test("marking a notification read is scoped to its recipient", async () => {
+  const notification = Object.assign(new Notification(), {
+    id: "notification-1",
+    recipientId: "user-1",
+    isRead: false,
+    readAt: null,
+  });
+  const notificationRepo = {
+    async findOne() {
+      return notification;
+    },
+    async save(item: Notification) {
+      return item;
+    },
+  };
+  const dataSource = {
+    getRepository(entity: typeof Notification | typeof User) {
+      return entity === Notification ? notificationRepo : {};
+    },
+  };
+  const repository = new NotificationRepository(dataSource as never);
+
+  await assert.rejects(
+    repository.markAsRead("notification-1", "user-2"),
+    NotificationNotFoundError,
+  );
+  assert.equal(notification.isRead, false);
+
+  const updated = await repository.markAsRead("notification-1", "user-1");
+  assert.equal(updated.isRead, true);
 });

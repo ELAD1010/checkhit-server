@@ -31,6 +31,10 @@ export const APPEAL_CATEGORIES = [
 ] as const;
 export type AppealCategory = (typeof APPEAL_CATEGORIES)[number];
 
+// Postgres rejects a plain FOR UPDATE when relations are LEFT JOINed, so
+// locked lookups that load relations lock only the appeal row (its find alias).
+const APPEAL_LOCK_TABLE = "appeals";
+
 export class AppealStudentNotFoundError extends Error {
   constructor(studentId: string) {
     super(`Student with ID ${studentId} was not found`);
@@ -385,7 +389,7 @@ export class AppealRepository {
       const appeal = await manager.getRepository(Appeal).findOne({
         where: { id: appealId },
         relations: { files: true },
-        lock: { mode: "pessimistic_write" },
+        lock: { mode: "pessimistic_write", tables: [APPEAL_LOCK_TABLE] },
       });
       if (!appeal) throw new AppealNotFoundError(appealId);
       if (appeal.studentId !== studentId) throw new AppealForbiddenError();
@@ -705,7 +709,7 @@ export class AppealRepository {
       const appeal = await manager.getRepository(Appeal).findOne({
         where: { id: appealId },
         relations: { evaluation: true },
-        lock: { mode: "pessimistic_write" },
+        lock: { mode: "pessimistic_write", tables: [APPEAL_LOCK_TABLE] },
       });
       if (!appeal) throw new AppealNotFoundError(appealId);
       if (
@@ -742,7 +746,7 @@ export class AppealRepository {
           resultEvaluation: true,
           submission: { assignment: true },
         },
-        lock: { mode: "pessimistic_write" },
+        lock: { mode: "pessimistic_write", tables: [APPEAL_LOCK_TABLE] },
       });
       if (!appeal) throw new AppealNotFoundError(appealId);
       if (

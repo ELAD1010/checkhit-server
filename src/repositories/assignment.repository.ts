@@ -1,4 +1,4 @@
-import { DataSource, In } from "typeorm";
+import { DataSource, In, Not } from "typeorm";
 import { AppDataSource } from "../database/data-source.js";
 import { Appeal } from "../entities/appeal.js";
 import { Assignment } from "../entities/assignment.js";
@@ -48,6 +48,7 @@ export type StudentAssignmentFileSummary = {
   name: string;
   sizeBytes: number;
   mimeType: string;
+  downloadUrl: string;
 };
 
 export type StudentAssignmentSubmissionSummary = {
@@ -266,11 +267,21 @@ export class AssignmentRepository {
     }
 
     const assignment = await this.dataSource.getRepository(Assignment).findOne({
-      where: { id: assignmentId },
+      where: { id: assignmentId, status: Not(AssignmentStatus.DRAFT) },
       relations: { course: true },
     });
 
     if (!assignment) {
+      return null;
+    }
+
+    const isEnrolled = await this.dataSource.getRepository(Enrollment).existsBy({
+      studentId,
+      courseId: assignment.courseId,
+      status: MembershipStatus.ACTIVE,
+    });
+
+    if (!isEnrolled) {
       return null;
     }
 
@@ -327,6 +338,7 @@ export class AssignmentRepository {
           name: sf.file.originalName,
           sizeBytes: Number(sf.file.sizeBytes),
           mimeType: sf.file.mimeType,
+          downloadUrl: `/api/submissions/${submission.id}/files/${sf.file.id}`,
         })) || [];
 
       submissionDetail = {
@@ -427,7 +439,7 @@ export class AssignmentRepository {
     }
 
     const assignments = await this.dataSource.getRepository(Assignment).find({
-      where: { courseId },
+      where: { courseId, status: Not(AssignmentStatus.DRAFT) },
       order: {
         createdAt: "ASC",
       },
@@ -541,7 +553,10 @@ export class AssignmentRepository {
     const courseIds = enrollments.map((e) => e.courseId);
 
     const assignments = await this.dataSource.getRepository(Assignment).find({
-      where: { courseId: In(courseIds) },
+      where: {
+        courseId: In(courseIds),
+        status: Not(AssignmentStatus.DRAFT),
+      },
       relations: { course: true },
       order: {
         dueAt: "ASC",

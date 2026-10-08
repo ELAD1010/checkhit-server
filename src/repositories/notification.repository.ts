@@ -87,12 +87,18 @@ export class NotificationRepository {
     });
   }
 
-  async markAsRead(notificationId: string): Promise<Notification> {
+  async markAsRead(
+    notificationId: string,
+    recipientId?: string,
+  ): Promise<Notification> {
     const notification = await this.notificationRepo.findOne({
       where: { id: notificationId },
     });
 
-    if (!notification) {
+    if (
+      !notification ||
+      (recipientId !== undefined && notification.recipientId !== recipientId)
+    ) {
       throw new NotificationNotFoundError(notificationId);
     }
 

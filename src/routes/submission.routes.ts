@@ -1,6 +1,7 @@
 import { Router } from "express";
 import {
   createSubmission,
+  downloadSubmissionFile,
   getSubmission,
   listAssignmentSubmissions,
   submitSubmission,
@@ -171,6 +172,40 @@ submissionRouter.get(
   "/submissions/:submissionId",
   requireLtiAuth,
   getSubmission,
+);
+
+/**
+ * @openapi
+ * /submissions/{submissionId}/files/{fileId}:
+ *   get:
+ *     tags: [Submissions]
+ *     summary: Download a file attached to a submission
+ *     description: Available to the submitting student and to lecturers of the assignment's course.
+ *     parameters:
+ *       - in: path
+ *         name: submissionId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *       - in: path
+ *         name: fileId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     responses:
+ *       200:
+ *         description: File content
+ *       403:
+ *         description: The submission belongs to another student
+ *       404:
+ *         description: Submission or file not found
+ */
+submissionRouter.get(
+  "/submissions/:submissionId/files/:fileId",
+  requireLtiAuth,
+  downloadSubmissionFile,
 );
 
 /**

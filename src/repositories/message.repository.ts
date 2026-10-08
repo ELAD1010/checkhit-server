@@ -1,4 +1,4 @@
-import { DataSource, In, Repository } from "typeorm";
+import { DataSource, EntityManager, In, Repository } from "typeorm";
 import { AppDataSource } from "../database/data-source.js";
 import { Course } from "../entities/course.js";
 import { Enrollment } from "../entities/enrollment.js";
@@ -67,6 +67,27 @@ export interface PaginatedMessagesResult {
   page: number;
   limit: number;
 }
+
+/**
+ * Participants who should see a reply as unread. Replies to a course broadcast
+ * from students go only to the broadcast's author, matching reply notifications.
+ */
+export const threadReplyRecipientIds = (
+  root: Pick<Message, "senderId" | "targetType"> & {
+    recipients?: Array<Pick<MessageRecipient, "recipientId">>;
+  },
+  replierId: string,
+): string[] => {
+  const participants =
+    root.targetType === MessageTargetType.BROADCAST &&
+    replierId !== root.senderId
+      ? [root.senderId]
+      : [
+          root.senderId,
+          ...(root.recipients ?? []).map((item) => item.recipientId),
+        ];
+  return [...new Set(participants)].filter((id) => id !== replierId);
+};
 
 export class MessageRepository {
   private messageRepo: Repository<Message>;
@@ -215,8 +236,11 @@ export class MessageRepository {
       const isRead = userRecipient ? userRecipient.isRead : true;
       const readAt = userRecipient ? userRecipient.readAt : null;
       const isArchived = userRecipient ? userRecipient.isArchived : false;
-      const recipientCount = msgRecipients.length;
-      const readCount = msgRecipients.filter((r) => r.isRead).length;
+      const deliveredTo = msgRecipients.filter(
+        (r) => r.recipientId !== msg.senderId,
+      );
+      const recipientCount = deliveredTo.length;
+      const readCount = deliveredTo.filter((r) => r.isRead).length;
       const repliesCount = repliesCountMap.get(msg.id) ?? 0;
 
       msg.snippet = this.generateSnippet(msg.content);
@@ -238,6 +262,29 @@ export class MessageRepository {
       page,
       limit,
     };
+  }
+
+  /**
+   * A user takes part in a thread when they sent its root message or received it.
+   */
+  async isThreadParticipant(messageId: string, userId: string): Promise<boolean> {
+    const message = await this.messageRepo.findOne({
+      where: { id: messageId },
+      select: { id: true, parentMessageId: true },
+    });
+
+    if (!message) {
+      throw new MessageNotFoundError(messageId);
+    }
+
+    const rootId = message.parentMessageId || message.id;
+    const [isSender, isRecipient] = await Promise.all([
+      this.messageRepo.existsBy({ id: rootId, senderId: userId }),
+      this.dataSource
+        .getRepository(MessageRecipient)
+        .existsBy({ messageId: rootId, recipientId: userId }),
+    ]);
+    return isSender || isRecipient;
   }
 
   /**
@@ -271,8 +318,11 @@ export class MessageRepository {
 
     // Populate delivery stats
     const recipients = message.recipients || [];
-    message.recipientCount = recipients.length;
-    message.readCount = recipients.filter((r) => r.isRead).length;
+    const deliveredTo = recipients.filter(
+      (r) => r.recipientId !== message.senderId,
+    );
+    message.recipientCount = deliveredTo.length;
+    message.readCount = deliveredTo.filter((r) => r.isRead).length;
     message.repliesCount = replies.length;
     message.snippet = this.generateSnippet(message.content);
 
@@ -512,24 +562,82 @@ export class MessageRepository {
     // Attach to root if parent was itself a reply
     const rootParentId = parent.parentMessageId || parent.id;
 
-    const reply = this.messageRepo.create({
-      senderId: data.senderId,
-      courseId: parent.courseId,
-      targetType: parent.targetType,
-      subject: parent.subject.startsWith("Re:")
-        ? parent.subject
-        : `Re: ${parent.subject}`,
-      content: data.content,
-      isPriority: false,
-      parentMessageId: rootParentId,
+    return this.dataSource.transaction(async (manager) => {
+      const root =
+        rootParentId === parent.id
+          ? parent
+          : await manager.findOne(Message, {
+              where: { id: rootParentId },
+              relations: { recipients: true },
+            });
+      if (!root) {
+        throw new MessageNotFoundError(rootParentId);
+      }
+
+      const reply = manager.create(Message, {
+        senderId: data.senderId,
+        courseId: parent.courseId,
+        targetType: parent.targetType,
+        subject: parent.subject.startsWith("Re:")
+          ? parent.subject
+          : `Re: ${parent.subject}`,
+        content: data.content,
+        isPriority: false,
+        parentMessageId: rootParentId,
+      });
+
+      const savedReply = await manager.save(Message, reply);
+      await this.markThreadUnread(
+        manager,
+        root.id,
+        threadReplyRecipientIds(root, data.senderId),
+      );
+
+      savedReply.sender = sender;
+      savedReply.course = parent.course;
+      savedReply.snippet = this.generateSnippet(savedReply.content);
+
+      return savedReply;
     });
+  }
 
-    const savedReply = await this.messageRepo.save(reply);
-    savedReply.sender = sender;
-    savedReply.course = parent.course;
-    savedReply.snippet = this.generateSnippet(savedReply.content);
+  /**
+   * Inbox rows live on the thread root, so a reply resurfaces the thread as
+   * unread. The root's author gets a row here the first time someone answers.
+   */
+  private async markThreadUnread(
+    manager: EntityManager,
+    rootMessageId: string,
+    recipientIds: string[],
+  ): Promise<void> {
+    if (recipientIds.length === 0) return;
 
-    return savedReply;
+    const existing = await manager.find(MessageRecipient, {
+      where: { messageId: rootMessageId, recipientId: In(recipientIds) },
+      select: { id: true, recipientId: true },
+    });
+    if (existing.length > 0) {
+      await manager.update(
+        MessageRecipient,
+        { id: In(existing.map((row) => row.id)) },
+        { isRead: false, readAt: null, isArchived: false },
+      );
+    }
+
+    const existingIds = new Set(existing.map((row) => row.recipientId));
+    const missing = recipientIds.filter((id) => !existingIds.has(id));
+    if (missing.length > 0) {
+      await manager.save(
+        MessageRecipient,
+        missing.map((recipientId) =>
+          manager.create(MessageRecipient, {
+            messageId: rootMessageId,
+            recipientId,
+            isRead: false,
+          }),
+        ),
+      );
+    }
   }
 
   /**

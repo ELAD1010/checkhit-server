@@ -4,6 +4,7 @@ import {
   CreateCourseInput,
   LecturersNotFoundError,
 } from "../repositories/course.repository.js";
+import type { AuthenticatedRequest } from "../middleware/lti-auth.js";
 import { getDatabaseErrorCode, isUuid } from "./user-controller.utils.js";
 
 const courseRepository = new CourseRepository();
@@ -43,7 +44,7 @@ const parseCreateCourseInput = (body: unknown): CreateCourseInput | null => {
 };
 
 export const createCourse = async (
-  req: Request,
+  req: AuthenticatedRequest,
   res: Response,
 ): Promise<void> => {
   const input = parseCreateCourseInput(req.body);
@@ -52,6 +53,13 @@ export const createCourse = async (
     res.status(400).json({
       message:
         "name, semester, academicYear, and at least one valid lecturer ID are required",
+    });
+    return;
+  }
+
+  if (req.auth && !input.lecturerIds.includes(req.auth.userId)) {
+    res.status(403).json({
+      message: "You must be one of the course lecturers",
     });
     return;
   }

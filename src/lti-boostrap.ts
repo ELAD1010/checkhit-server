@@ -22,6 +22,7 @@ import {
   LtiLaunchSyncService,
   LtiRoleConflictError,
 } from "./services/lti-launch-sync.service.js";
+import { gradePassbackWorker } from "./workers/grade-passback.worker.js";
 import { gradingWorker } from "./workers/grading.worker.js";
 import { handleUploadErrors } from "./middleware/upload.js";
 import { notificationWorker } from "./workers/notification.worker.js";
@@ -176,6 +177,8 @@ export const boostrapLti = async (db: Database): Promise<void> => {
    *         description: Lecturer role required
    *       404:
    *         description: Assignment not found in the launched course
+   *       409:
+   *         description: The current launch is not a deep-linking request (code NOT_DEEP_LINKING_LAUNCH)
    *       500:
    *         description: Server error
    */
@@ -211,6 +214,15 @@ export const boostrapLti = async (db: Database): Promise<void> => {
           .send("Assignment not found in the launched Moodle course");
       }
 
+      const returnUrl =
+        launchToken.platformContext.deepLinkingSettings?.deep_link_return_url;
+      if (!returnUrl) {
+        return res.status(409).json({
+          code: "NOT_DEEP_LINKING_LAUNCH",
+          message: "The current Moodle launch is not a deep-linking request",
+        });
+      }
+
       const contentItems = [
         {
           type: "ltiResourceLink",
@@ -233,9 +245,7 @@ export const boostrapLti = async (db: Database): Promise<void> => {
       if (typeof message !== "string") {
         throw new Error("Deep-link message could not be created");
       }
-      const returnUrl =
-        launchToken.platformContext.deepLinkingSettings?.deep_link_return_url;
-      if (!returnUrl || !launchToken.clientId) {
+      if (!launchToken.clientId) {
         throw new Error("Deep-link launch context is incomplete");
       }
 
@@ -284,10 +294,12 @@ export const boostrapLti = async (db: Database): Promise<void> => {
 
   gradingWorker.start();
   notificationWorker.start();
+  gradePassbackWorker.start();
 
   const shutdown = async (): Promise<void> => {
     await gradingWorker.stop();
     notificationWorker.stop();
+    gradePassbackWorker.stop();
     evaluationRealtime.close();
     await new Promise<void>((resolve) => httpServer.close(() => resolve()));
   };

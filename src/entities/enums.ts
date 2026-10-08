@@ -45,6 +45,11 @@ export enum QuestionSource {
   DOCUMENT_IMPORT = "DOCUMENT_IMPORT",
 }
 
+export enum LtiScoreSyncStatus {
+  SYNCED = "SYNCED",
+  FAILED = "FAILED",
+}
+
 export enum AppealStatus {
   SUBMITTED = "SUBMITTED",
   UNDER_REVIEW = "UNDER_REVIEW",

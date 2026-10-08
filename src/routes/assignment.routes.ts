@@ -10,8 +10,17 @@ import {
   getStudentCourseAssignments,
   getStudentRecentGrades,
 } from "../controllers/assignment.controller.js";
+import { accessControl } from "../middleware/access-control.js";
 
 export const assignmentRouter = Router();
+const {
+  requireIdentity,
+  requireSelf,
+  requireCourseMember,
+  requireCourseLecturer,
+  requireAssignmentMember,
+  requireAssignmentLecturer,
+} = accessControl;
 
 /**
  * @openapi
@@ -47,7 +56,12 @@ export const assignmentRouter = Router();
  *       500:
  *         description: Server error
  */
-assignmentRouter.post("/courses/:courseId/assignments", createAssignment);
+assignmentRouter.post(
+  "/courses/:courseId/assignments",
+  requireIdentity,
+  requireCourseLecturer(),
+  createAssignment,
+);
 
 /**
  * @openapi
@@ -79,7 +93,12 @@ assignmentRouter.post("/courses/:courseId/assignments", createAssignment);
  *       500:
  *         description: Server error
  */
-assignmentRouter.get("/courses/:courseId/assignments", getCourseAssignments);
+assignmentRouter.get(
+  "/courses/:courseId/assignments",
+  requireIdentity,
+  requireCourseMember(),
+  getCourseAssignments,
+);
 
 /**
  * @openapi
@@ -120,6 +139,8 @@ assignmentRouter.get("/courses/:courseId/assignments", getCourseAssignments);
  */
 assignmentRouter.get(
   "/students/:studentId/courses/:courseId/assignments",
+  requireIdentity,
+  requireSelf("studentId"),
   getStudentCourseAssignments,
 );
 
@@ -192,6 +213,8 @@ assignmentRouter.get(
  */
 assignmentRouter.get(
   "/students/:studentId/assignments",
+  requireIdentity,
+  requireSelf("studentId"),
   getAllStudentAssignments,
 );
 
@@ -247,6 +270,8 @@ assignmentRouter.get(
  */
 assignmentRouter.get(
   "/students/:studentId/grades",
+  requireIdentity,
+  requireSelf("studentId"),
   getStudentRecentGrades,
 );
 
@@ -299,7 +324,12 @@ assignmentRouter.get(
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
-assignmentRouter.get("/assignments/:assignmentId", getAssignmentById);
+assignmentRouter.get(
+  "/assignments/:assignmentId",
+  requireIdentity,
+  requireAssignmentMember(),
+  getAssignmentById,
+);
 
 /**
  * @openapi
@@ -350,6 +380,9 @@ assignmentRouter.get("/assignments/:assignmentId", getAssignmentById);
  */
 assignmentRouter.get(
   "/students/:studentId/assignments/:assignmentId",
+  requireIdentity,
+  requireSelf("studentId"),
+  requireAssignmentMember(),
   getStudentAssignmentDetail,
 );
 
@@ -377,7 +410,12 @@ assignmentRouter.get(
  *       500:
  *         description: Server error
  */
-assignmentRouter.delete("/assignments/:assignmentId", deleteAssignment);
+assignmentRouter.delete(
+  "/assignments/:assignmentId",
+  requireIdentity,
+  requireAssignmentLecturer(),
+  deleteAssignment,
+);
 
 /**
  * @openapi
@@ -434,6 +472,8 @@ assignmentRouter.delete("/assignments/:assignmentId", deleteAssignment);
  */
 assignmentRouter.get(
   "/assignments/:assignmentId/lecturer-overview",
+  requireIdentity,
+  requireAssignmentLecturer(),
   getLecturerAssignmentOverview,
 );
 

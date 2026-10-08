@@ -9,7 +9,7 @@
     "dev": "tsx src/index.ts",
     "seed": "tsx src/seed.ts",
     "start": "node dist/index.js",
-    "test": "tsx --test src/appeals/appeal.contract.test.ts src/appeals/schemas.test.ts src/config/moodle-platform.config.test.ts src/grading/schemas.test.ts src/repositories/notification.repository.test.ts src/services/appeal-ai.service.test.ts src/services/deep-link-token.service.test.ts src/services/grading.service.test.ts src/services/notification-live.service.test.ts src/storage/local-file-storage.test.ts"
+    "test": "tsx --test src/api/index.test.ts src/appeals/appeal.contract.test.ts src/appeals/schemas.test.ts src/config/moodle-platform.config.test.ts src/grading/schemas.test.ts src/middleware/access-control.test.ts src/repositories/course.repository.test.ts src/repositories/message.repository.test.ts src/repositories/notification.repository.test.ts src/repositories/submission.repository.test.ts src/services/appeal-ai.service.test.ts src/services/deep-link-token.service.test.ts src/services/grade-passback.service.test.ts src/services/grading.service.test.ts src/services/notification-live.service.test.ts src/storage/local-file-storage.test.ts"
   },
   "keywords": [],
   "author": "",

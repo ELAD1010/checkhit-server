@@ -1,4 +1,4 @@
-import { DataSource } from "typeorm";
+import { DataSource, In } from "typeorm";
 import { AppDataSource } from "../database/data-source.js";
 import { Assignment } from "../entities/assignment.js";
 import { Appeal } from "../entities/appeal.js";
@@ -11,9 +11,11 @@ import {
   MessageTargetType,
   NotificationCategory,
   SubmissionStatus,
+  UserRole,
 } from "../entities/enums.js";
 import { Message } from "../entities/message.js";
 import { Submission } from "../entities/submission.js";
+import { User } from "../entities/user.js";
 import type { CreateNotificationInput } from "../repositories/notification.repository.js";
 import { NotificationRepository } from "../repositories/notification.repository.js";
 import { notificationLiveService } from "./notification-live.service.js";
@@ -163,7 +165,7 @@ export class NotificationService {
         title: "Appeal received",
         body: `Your appeal for ${assignment.name} was received.`,
         category: NotificationCategory.APPEAL,
-        link: `/student/appeals/${appeal.id}`,
+        link: `/student/assignments/${assignment.id}`,
         eventKey: `APPEAL_RECEIVED:${appeal.id}`,
         metadata: common,
       });
@@ -180,7 +182,7 @@ export class NotificationService {
         title: "Appeal under review",
         body: `Your appeal for ${assignment.name} is being reviewed.`,
         category: NotificationCategory.APPEAL,
-        link: `/student/appeals/${appeal.id}`,
+        link: `/student/assignments/${assignment.id}`,
         eventKey: `APPEAL_UNDER_REVIEW:${appeal.id}`,
         metadata: common,
       });
@@ -202,7 +204,7 @@ export class NotificationService {
           ? `Your appeal for ${assignment.name} was accepted.`
           : `Your appeal for ${assignment.name} was ${appeal.status.toLowerCase()}.`,
         category: NotificationCategory.APPEAL,
-        link: `/student/appeals/${appeal.id}`,
+        link: `/student/assignments/${assignment.id}`,
         eventKey: `APPEAL_RESOLVED:${appeal.id}:${appeal.status}`,
         metadata: { ...common, resolution: appeal.resolution },
       });
@@ -240,7 +242,12 @@ export class NotificationService {
       message.isPriority ||
       Boolean(message.parentMessageId);
     if (!shouldNotify) return;
-    await this.send(recipients, {
+    const threadId = message.parentMessageId ?? message.id;
+    const users = await this.dataSource.getRepository(User).find({
+      where: { id: In(recipients) },
+      select: { id: true, role: true },
+    });
+    const payload = {
       title: message.isPriority
         ? "Priority message"
         : message.parentMessageId
@@ -250,10 +257,19 @@ export class NotificationService {
             : "New direct message",
       body: `${message.sender.name}: ${message.subject}`,
       category: NotificationCategory.INFO,
-      link: `/messages/${message.parentMessageId ?? message.id}`,
       eventKey: `MESSAGE:${message.id}`,
-      metadata: { messageId: message.id, courseId: message.courseId },
-    });
+      metadata: { messageId: message.id, threadId, courseId: message.courseId },
+    };
+    for (const portal of [UserRole.LECTURER, UserRole.STUDENT]) {
+      const portalRecipients = users
+        .filter((user) => user.role === portal)
+        .map((user) => user.id);
+      if (portalRecipients.length === 0) continue;
+      await this.send(portalRecipients, {
+        ...payload,
+        link: `/${portal === UserRole.LECTURER ? "lecturer" : "student"}/messages?message=${threadId}`,
+      });
+    }
   }
 
   private assignmentContext(id: string) {

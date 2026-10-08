@@ -12,7 +12,12 @@ import { getDatabaseErrorCode, isUuid } from "./user-controller.utils.js";
 import { notificationService } from "../services/notification.service.js";
 import { AppDataSource } from "../database/data-source.js";
 import { Assignment } from "../entities/assignment.js";
-import { MembershipStatus, NotificationCategory } from "../entities/enums.js";
+import {
+  MembershipStatus,
+  NotificationCategory,
+  UserRole,
+} from "../entities/enums.js";
+import type { AuthenticatedRequest } from "../middleware/lti-auth.js";
 
 const assignmentRepository = new AssignmentRepository();
 
@@ -139,7 +144,7 @@ export const createAssignment = async (
 };
 
 export const getAssignmentById = async (
-  req: Request,
+  req: AuthenticatedRequest,
   res: Response,
 ): Promise<void> => {
   const assignmentId =
@@ -152,18 +157,30 @@ export const getAssignmentById = async (
     return;
   }
 
-  const studentId =
+  const requestedStudentId =
     typeof req.query.studentId === "string" && req.query.studentId.trim() !== ""
       ? req.query.studentId.trim()
       : typeof req.params.studentId === "string" &&
           req.params.studentId.trim() !== ""
         ? req.params.studentId.trim()
-        : (res.locals?.token?.user as string | undefined);
+        : undefined;
 
-  if (studentId && !isUuid(studentId)) {
+  if (requestedStudentId && !isUuid(requestedStudentId)) {
     res.status(400).json({ message: "A valid student ID is required" });
     return;
   }
+
+  if (
+    req.auth?.role === UserRole.STUDENT &&
+    requestedStudentId &&
+    requestedStudentId !== req.auth.userId
+  ) {
+    res.status(403).json({ message: "You do not have access to this resource" });
+    return;
+  }
+
+  const studentId =
+    req.auth?.role === UserRole.STUDENT ? req.auth.userId : requestedStudentId;
 
   try {
     if (studentId) {
@@ -205,7 +222,7 @@ export const getAssignmentById = async (
 export const getStudentAssignmentDetail = getAssignmentById;
 
 export const getCourseAssignments = async (
-  req: Request,
+  req: AuthenticatedRequest,
   res: Response,
 ): Promise<void> => {
   const courseId =
@@ -219,7 +236,13 @@ export const getCourseAssignments = async (
   try {
     const assignments =
       await assignmentRepository.findAssignmentsByCourseId(courseId);
-    res.json(assignments);
+    res.json(
+      req.auth?.role === UserRole.STUDENT
+        ? assignments.filter(
+            (assignment) => assignment.status !== AssignmentStatus.DRAFT,
+          )
+        : assignments,
+    );
   } catch (error) {
     if (error instanceof AssignmentCourseNotFoundError) {
       res.status(404).json({ message: "Course not found" });

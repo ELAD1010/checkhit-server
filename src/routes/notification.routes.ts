@@ -6,8 +6,10 @@ import {
   markNotificationAsRead,
   streamUserNotifications,
 } from "../controllers/notification.controller.js";
+import { accessControl } from "../middleware/access-control.js";
 
 export const notificationRouter = Router();
+const { requireIdentity, requireSelf } = accessControl;
 
 /**
  * @openapi
@@ -52,7 +54,12 @@ export const notificationRouter = Router();
  *       500:
  *         description: Server error
  */
-notificationRouter.get("/users/:userId/notifications", getUserNotifications);
+notificationRouter.get(
+  "/users/:userId/notifications",
+  requireIdentity,
+  requireSelf("userId"),
+  getUserNotifications,
+);
 
 /**
  * @openapi
@@ -77,6 +84,8 @@ notificationRouter.get("/users/:userId/notifications", getUserNotifications);
  */
 notificationRouter.get(
   "/users/:userId/notifications/stream",
+  requireIdentity,
+  requireSelf("userId"),
   streamUserNotifications,
 );
 
@@ -113,6 +122,8 @@ notificationRouter.get(
  */
 notificationRouter.get(
   "/users/:userId/notifications/unread-count",
+  requireIdentity,
+  requireSelf("userId"),
   getUnreadCount,
 );
 
@@ -144,7 +155,11 @@ notificationRouter.get(
  *       500:
  *         description: Server error
  */
-notificationRouter.patch("/notifications/:id/read", markNotificationAsRead);
+notificationRouter.patch(
+  "/notifications/:id/read",
+  requireIdentity,
+  markNotificationAsRead,
+);
 
 /**
  * @openapi
@@ -181,5 +196,7 @@ notificationRouter.patch("/notifications/:id/read", markNotificationAsRead);
  */
 notificationRouter.patch(
   "/users/:userId/notifications/read-all",
+  requireIdentity,
+  requireSelf("userId"),
   markAllNotificationsAsRead,
 );

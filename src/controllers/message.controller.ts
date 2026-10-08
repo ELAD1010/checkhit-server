@@ -1,5 +1,5 @@
-import { Request, Response } from "express";
-import { MessageTargetType } from "../entities/enums.js";
+import { NextFunction, Request, Response } from "express";
+import { MessageTargetType, UserRole } from "../entities/enums.js";
 import {
   MessageCourseNotFoundError,
   MessageInvalidRecipientError,
@@ -7,12 +7,61 @@ import {
   MessageRepository,
   MessageUserNotFoundError,
 } from "../repositories/message.repository.js";
+import { accessControl } from "../middleware/access-control.js";
+import type { AuthenticatedRequest } from "../middleware/lti-auth.js";
 import { isUuid } from "./user-controller.utils.js";
 import { notificationService } from "../services/notification.service.js";
 
 const messageRepository = new MessageRepository();
 
-const extractUserId = (req: Request): string | undefined => {
+const claimedUserIds = (req: Request): unknown[] => [
+  req.params.userId,
+  req.query.userId,
+  req.headers["x-user-id"],
+  req.body?.userId,
+  req.body?.senderId,
+];
+
+/**
+ * With an LTI session the caller's identity is authoritative; any explicit
+ * user ID in the request must match it.
+ */
+export const rejectForeignMessageUser = (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction,
+): void => {
+  if (
+    req.auth &&
+    claimedUserIds(req).some(
+      (value) => value !== undefined && value !== req.auth?.userId,
+    )
+  ) {
+    res.status(403).json({ message: "You do not have access to this resource" });
+    return;
+  }
+  next();
+};
+
+const assertThreadAccess = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  messageId: string,
+): Promise<boolean> => {
+  if (!req.auth) {
+    return true;
+  }
+  if (!(await messageRepository.isThreadParticipant(messageId, req.auth.userId))) {
+    res.status(404).json({ message: `Message ${messageId} not found` });
+    return false;
+  }
+  return true;
+};
+
+const extractUserId = (req: AuthenticatedRequest): string | undefined => {
+  if (req.auth) {
+    return req.auth.userId;
+  }
   if (typeof req.params.userId === "string" && isUuid(req.params.userId)) {
     return req.params.userId;
   }
@@ -142,6 +191,9 @@ export const getMessageById = async (
   const userId = extractUserId(req);
 
   try {
+    if (!(await assertThreadAccess(req, res, id))) {
+      return;
+    }
     const message = await messageRepository.findMessageById(id, userId);
 
     const formattedMessage = {
@@ -203,18 +255,12 @@ export const getMessageById = async (
 };
 
 export const createMessage = async (
-  req: Request,
+  req: AuthenticatedRequest,
   res: Response,
 ): Promise<void> => {
-  const {
-    senderId,
-    targetType,
-    courseId,
-    recipientId,
-    subject,
-    content,
-    isPriority,
-  } = req.body;
+  const { targetType, courseId, recipientId, subject, content, isPriority } =
+    req.body;
+  const senderId = req.auth?.userId ?? req.body.senderId;
 
   if (!senderId || !isUuid(senderId)) {
     res.status(400).json({ message: "A valid senderId is required" });
@@ -249,6 +295,28 @@ export const createMessage = async (
   }
 
   try {
+    if (req.auth) {
+      const { access } = accessControl;
+      const allowed =
+        parsedTargetType === MessageTargetType.BROADCAST
+          ? req.auth.role === UserRole.LECTURER &&
+            (await access.isCourseLecturer(req.auth.userId, courseId))
+          : parsedTargetType === MessageTargetType.DIRECT
+            ? await access.shareCourse(req.auth.userId, recipientId)
+            : false;
+      if (!allowed) {
+        res.status(403).json({
+          message:
+            parsedTargetType === MessageTargetType.BROADCAST
+              ? "Only course lecturers can broadcast to a course"
+              : parsedTargetType === MessageTargetType.DIRECT
+                ? "You can only message users who share a course with you"
+                : "System messages cannot be sent by users",
+        });
+        return;
+      }
+    }
+
     const created = await messageRepository.createMessage({
       senderId,
       targetType: parsedTargetType,
@@ -283,7 +351,7 @@ export const createMessage = async (
 };
 
 export const createReply = async (
-  req: Request,
+  req: AuthenticatedRequest,
   res: Response,
 ): Promise<void> => {
   const id = typeof req.params.id === "string" ? req.params.id : undefined;
@@ -293,7 +361,8 @@ export const createReply = async (
     return;
   }
 
-  const { senderId, content } = req.body;
+  const { content } = req.body;
+  const senderId = req.auth?.userId ?? req.body.senderId;
 
   if (!senderId || !isUuid(senderId)) {
     res.status(400).json({ message: "A valid senderId is required" });
@@ -306,6 +375,9 @@ export const createReply = async (
   }
 
   try {
+    if (!(await assertThreadAccess(req, res, id))) {
+      return;
+    }
     const reply = await messageRepository.createReply({
       parentMessageId: id,
       senderId,

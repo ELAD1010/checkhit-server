@@ -4,6 +4,7 @@ import {
   NotificationRepository,
   NotificationUserNotFoundError,
 } from "../repositories/notification.repository.js";
+import type { AuthenticatedRequest } from "../middleware/lti-auth.js";
 import { isUuid } from "./user-controller.utils.js";
 import { notificationLiveService } from "../services/notification-live.service.js";
 
@@ -114,7 +115,7 @@ export const getUnreadCount = async (
 };
 
 export const markNotificationAsRead = async (
-  req: Request,
+  req: AuthenticatedRequest,
   res: Response,
 ): Promise<void> => {
   const id = typeof req.params.id === "string" ? req.params.id : undefined;
@@ -125,7 +126,10 @@ export const markNotificationAsRead = async (
   }
 
   try {
-    const notification = await notificationRepository.markAsRead(id);
+    const notification = await notificationRepository.markAsRead(
+      id,
+      req.auth?.userId,
+    );
     notificationLiveService.publishEvent(notification.recipientId, "notification-read", {
       notificationId: notification.id,
       readAt: notification.readAt,
