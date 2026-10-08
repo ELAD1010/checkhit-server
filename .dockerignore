@@ -1,0 +1,11 @@
+node_modules
+dist
+storage
+scratch
+.git
+.env
+.env.*
+*.log
+Dockerfile
+docker-compose.yml
+Caddyfile
