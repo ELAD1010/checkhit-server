@@ -2,7 +2,9 @@ import { DataSource, In, Not } from "typeorm";
 import { AppDataSource } from "../database/data-source.js";
 import { Appeal } from "../entities/appeal.js";
 import { Assignment } from "../entities/assignment.js";
+import { AssignmentQuestionImport } from "../entities/assignment-question-import.js";
 import { Course } from "../entities/course.js";
+import type { FileAsset } from "../entities/file-asset.js";
 import { Student } from "../entities/student.js";
 import { Enrollment } from "../entities/enrollment.js";
 import { Submission } from "../entities/submission.js";
@@ -86,6 +88,7 @@ export type StudentAssignmentDetailResult = Assignment & {
   studentStatus: StudentAssignmentStatus;
   submission: StudentAssignmentDetailSubmission | null;
   appeal: StudentAssignmentAppealSummary | null;
+  assignmentFile: StudentAssignmentFileSummary | null;
 };
 
 export interface StudentAssignmentsQueryOptions {
@@ -254,6 +257,17 @@ export class AssignmentRepository {
     });
   }
 
+  async findAssignmentDocument(assignmentId: string): Promise<FileAsset | null> {
+    const latestImport = await this.dataSource
+      .getRepository(AssignmentQuestionImport)
+      .findOne({
+        where: { assignmentId },
+        relations: { file: true },
+        order: { createdAt: "DESC" },
+      });
+    return latestImport?.file ?? null;
+  }
+
   async findStudentAssignmentDetail(
     assignmentId: string,
     studentId: string,
@@ -382,10 +396,22 @@ export class AssignmentRepository {
       }
     }
 
+    const document = await this.findAssignmentDocument(assignmentId);
+    const assignmentFile: StudentAssignmentFileSummary | null = document
+      ? {
+          id: document.id,
+          name: document.originalName,
+          sizeBytes: Number(document.sizeBytes),
+          mimeType: document.mimeType,
+          downloadUrl: `/api/assignments/${assignmentId}/file`,
+        }
+      : null;
+
     return Object.assign(assignment, {
       studentStatus,
       submission: submissionDetail,
       appeal: appealDetail,
+      assignmentFile,
     });
   }
 

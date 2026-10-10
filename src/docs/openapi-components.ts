@@ -416,6 +416,11 @@ export const openApiComponents = {
               type: ["object", "null"],
               $ref: "#/components/schemas/StudentAssignmentAppeal",
             },
+            assignmentFile: {
+              type: ["object", "null"],
+              description: "Assignment document uploaded by the lecturer",
+              $ref: "#/components/schemas/StudentAssignmentFile",
+            },
           },
         },
       ],

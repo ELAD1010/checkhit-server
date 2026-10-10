@@ -18,8 +18,13 @@ import {
   UserRole,
 } from "../entities/enums.js";
 import type { AuthenticatedRequest } from "../middleware/lti-auth.js";
+import {
+  LocalFileStorage,
+  type FileStorage,
+} from "../storage/local-file-storage.js";
 
 const assignmentRepository = new AssignmentRepository();
+const fileStorage: FileStorage = new LocalFileStorage();
 
 const parseOptionalDate = (
   value: unknown,
@@ -220,6 +225,50 @@ export const getAssignmentById = async (
 };
 
 export const getStudentAssignmentDetail = getAssignmentById;
+
+export const downloadAssignmentFile = async (
+  req: AuthenticatedRequest,
+  res: Response,
+): Promise<void> => {
+  const assignmentId =
+    typeof req.params.assignmentId === "string" ? req.params.assignmentId : "";
+  if (!isUuid(assignmentId)) {
+    res.status(400).json({ message: "A valid assignment ID is required" });
+    return;
+  }
+
+  try {
+    const assignment =
+      await assignmentRepository.findAssignmentById(assignmentId);
+    if (
+      !assignment ||
+      (req.auth?.role === UserRole.STUDENT &&
+        assignment.status === AssignmentStatus.DRAFT)
+    ) {
+      res.status(404).json({ message: "Assignment not found" });
+      return;
+    }
+
+    const file = await assignmentRepository.findAssignmentDocument(assignmentId);
+    if (!file) {
+      res.status(404).json({ message: "Assignment file not found" });
+      return;
+    }
+
+    const buffer = await fileStorage.read(file.objectKey);
+    res.setHeader("Content-Type", file.mimeType);
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename*=UTF-8''${encodeURIComponent(file.originalName)}`,
+    );
+    // The UI is served from another origin and reads the filename from this header.
+    res.setHeader("Access-Control-Expose-Headers", "Content-Disposition");
+    res.send(buffer);
+  } catch (error) {
+    console.error("Failed to download assignment file:", error);
+    res.status(500).json({ message: "Failed to download assignment file" });
+  }
+};
 
 export const getCourseAssignments = async (
   req: AuthenticatedRequest,

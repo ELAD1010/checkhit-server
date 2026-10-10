@@ -2,6 +2,7 @@ import { Router } from "express";
 import {
   createAssignment,
   deleteAssignment,
+  downloadAssignmentFile,
   getAllStudentAssignments,
   getAssignmentById,
   getCourseAssignments,
@@ -329,6 +330,44 @@ assignmentRouter.get(
   requireIdentity,
   requireAssignmentMember(),
   getAssignmentById,
+);
+
+/**
+ * @openapi
+ * /assignments/{assignmentId}/file:
+ *   get:
+ *     tags: [Assignments]
+ *     summary: Download the assignment document uploaded by the lecturer
+ *     parameters:
+ *       - in: path
+ *         name: assignmentId
+ *         required: true
+ *         description: Assignment ID
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     responses:
+ *       200:
+ *         description: The assignment document
+ *         content:
+ *           application/octet-stream:
+ *             schema:
+ *               type: string
+ *               format: binary
+ *       400:
+ *         description: Invalid assignment ID
+ *       403:
+ *         description: Not a member of the assignment's course
+ *       404:
+ *         description: Assignment or assignment file not found
+ *       500:
+ *         description: Server error
+ */
+assignmentRouter.get(
+  "/assignments/:assignmentId/file",
+  requireIdentity,
+  requireAssignmentMember(),
+  downloadAssignmentFile,
 );
 
 /**
